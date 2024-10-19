@@ -1,24 +1,27 @@
-import logo from './logo.svg';
 import './App.css';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import EmailList from './emails/email-list';
+import CreateTemplate from './emails/create-email';
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <Router>
+      <Routes>
+        <Route path='/' element={<EmailList />} />
+
+        {/* Wrap CreateTemplate in DndProvider */}
+        <Route
+          path='/create'
+          element={
+            <DndProvider backend={HTML5Backend}>
+              <CreateTemplate />
+            </DndProvider>
+          }
+        />
+      </Routes>
+    </Router>
   );
 }
 
