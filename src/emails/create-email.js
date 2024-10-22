@@ -39,9 +39,9 @@ const DraggableComponent = ({ type, label }) => {
 };
 
 // Non-Draggable Component
-const NonDraggableComponent = ({ label, style }) => (
-  <div className={`border rounded p-2 mb-2 ${style}`}>{label}</div>
-);
+// const NonDraggableComponent = ({ label, style }) => (
+//   <div className={`border rounded p-2 mb-2 ${style}`}>{label}</div>
+// );
 
 // Droppable Column Component
 const DroppableColumn = ({ column, setComponents, index, parentId }) => {
@@ -97,17 +97,23 @@ const DroppableColumn = ({ column, setComponents, index, parentId }) => {
 
 // Droppable Row Component
 const DroppableRow = ({ row, setComponents, parentId }) => {
+  let idCounter = 0;
   const addColumn = () => {
+    
+    console.log('abc')
+    const newColumnId = ++idCounter; // Increment for each new column
     const newColumn = {
-      id: Date.now(),
+      id: newColumnId, // Use the incremented idCounter
       label: `Column ${row.columns.length + 1}`,
       size: 6,
       components: [],
     };
     setComponents((prevSections) => {
       const updated = [...prevSections];
+      console.log(updated);
       const sectionIndex = updated.findIndex((s) => s.id === parentId);
       updated[sectionIndex].rows[0].columns.push(newColumn);
+      console.log(prevSections, updated);
       return updated;
     });
   };
@@ -124,8 +130,9 @@ const DroppableRow = ({ row, setComponents, parentId }) => {
   };
 
   return (
-    <div className='flex mb-2'>
+    <div className='flex justify-between mb-2 w-full'>
       {row.columns.map((col, index) => (
+        console.log(col),
         <div key={col.id} className='relative'>
           <DroppableColumn
             column={col}
@@ -141,7 +148,7 @@ const DroppableRow = ({ row, setComponents, parentId }) => {
           </Button>
         </div>
       ))}
-      <Button onClick={addColumn} className='bg-blue-500 text-white ml-2'>
+      <Button onClick={addColumn} className='bg-blue-500 text-white ml-2 self-center'>
         Add Column
       </Button>
     </div>
@@ -150,12 +157,14 @@ const DroppableRow = ({ row, setComponents, parentId }) => {
 
 // Droppable Section Component
 const DroppableSection = ({ section, setComponents }) => {
+  let idCounter = 0;
   const addRow = () => {
+    const newRowId = ++idCounter; // Increment for each new row
     const newRow = {
-      id: Date.now(),
+      id: newRowId, // Use the incremented idCounter
       columns: [
-        { id: Date.now() + 1, label: 'Column 1', size: 6, components: [] },
-        { id: Date.now() + 2, label: 'Column 2', size: 6, components: [] },
+        { id: ++idCounter, label: 'Column 1', size: 6, components: [] },
+        { id: ++idCounter, label: 'Column 2', size: 6, components: [] },
       ],
     };
     setComponents((prevSections) => {
@@ -328,7 +337,10 @@ const CreateTemplate = () => {
                 setComponents={setSections}
               />
             ))}
-            <Button onClick={addSection} className='bg-green-500 text-white'>
+            <Button
+              onClick={addSection}
+              className='bg-green-500 text-white p-3 '
+            >
               Add Section
             </Button>
           </div>
@@ -358,7 +370,7 @@ const CreateTemplate = () => {
         <div className='p-4 bg-gray-200 border-t text-center'>
           <Button
             onClick={handleSaveTemplate}
-            className='bg-blue-500 text-white py-2 px-4 rounded ml-4'
+            className='bg-blue-500 text-white p-3 rounded ml-4'
           >
             Save Template
           </Button>

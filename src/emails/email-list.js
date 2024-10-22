@@ -48,7 +48,6 @@ const EmailList = () => {
           </li>
         ))}
       </ul>
-      <Link to='/create'>Create New Template</Link>
     </div>
   );
 };
