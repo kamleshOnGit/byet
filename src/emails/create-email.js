@@ -80,6 +80,53 @@ const DraggableComponent = ({ type, label }) => {
   );
 };
 
+const moveComponent = (dragIndex, hoverIndex, columnId, setComponents, parentId, rowId) => {
+  setComponents((prevSections) => {
+    const updated = [...prevSections];
+    const sectionIndex = updated.findIndex((s) => s.id === parentId);
+    const rowIndex = updated[sectionIndex].rows.findIndex((r) => r.id === rowId);
+    const columnIndex = updated[sectionIndex].rows[rowIndex].columns.findIndex((c) => c.id === columnId);
+
+    const components = updated[sectionIndex].rows[rowIndex].columns[columnIndex].components;
+    const [draggedComponent] = components.splice(dragIndex, 1);
+    components.splice(hoverIndex, 0, draggedComponent);
+
+    return updated;
+  });
+};
+
+const DraggableComponentInColumn = ({ component, index, columnId, setComponents, parentId, rowId }) => {
+  const [, drag] = useDrag({
+    type: 'COMPONENT',
+    item: { index },
+  });
+
+  const [, drop] = useDrop({
+    accept: 'COMPONENT',
+    hover: (item) => {
+      if (item.index !== index) {
+        moveComponent(item.index, index, columnId, setComponents, parentId, rowId);
+        item.index = index;
+      }
+    },
+  });
+
+  return (
+    <Box
+      ref={(node) => drag(drop(node))}
+      style={{
+        border: '1px solid #ddd',
+        margin: '4px 0',
+        padding: '8px',
+        backgroundColor: '#fff',
+        cursor: 'grab',
+      }}
+    >
+      <EmailComponent component={component} setComponents={setComponents} />
+    </Box>
+  );
+};
+
 // Droppable Column Component
 const DroppableColumn = ({ column, setComponents, colSpan, parentId, rowId }) => {
   const [, drop] = useDrop({
@@ -124,22 +171,15 @@ const DroppableColumn = ({ column, setComponents, colSpan, parentId, rowId }) =>
     >
       {column.label}
       {column.components && column.components.map((comp, compIndex) => (
-        <Box
+        <DraggableComponentInColumn
           key={comp.id}
-          style={{
-            border: '1px solid #ddd',
-            margin: '4px 0',
-            padding: '8px',
-            backgroundColor: '#fff',
-            cursor: 'grab',
-          }}
-        >
-          <EmailComponent
-            component={comp}
-            setComponents={setComponents}
-            index={compIndex}
-          />
-        </Box>
+          component={comp}
+          index={compIndex}
+          columnId={column.id}
+          setComponents={setComponents}
+          parentId={parentId}
+          rowId={rowId}
+        />
       ))}
     </Box>
   );
@@ -156,7 +196,7 @@ const DroppableRow = ({ row, setComponents, parentId, index, moveRow }) => {
     accept: 'ROW',
     hover: (item) => {
       if (item.index !== index) {
-        moveRow(item.index, index);
+        moveRow(item.index, index, setComponents);
         item.index = index;
       }
     },
@@ -241,6 +281,7 @@ const DroppableSection = ({ section, setComponents }) => {
           setComponents={setComponents}
           parentId={section.id}
           index={index}
+          moveRow={moveRow}
         />
       ))}
       <Box position="absolute" top="4px" right="4px">
@@ -390,6 +431,20 @@ const removeRow = (row, setComponents, parentId) => {
     const updated = [...prevSections];
     const sectionIndex = updated.findIndex((s) => s.id === parentId);
     updated[sectionIndex].rows = updated[sectionIndex].rows.filter((r) => r.id !== row.id);
+    return updated;
+  });
+};
+
+const moveRow = (dragIndex, hoverIndex, setComponents) => {
+  setComponents((prevSections) => {
+    const updated = [...prevSections];
+
+    updated.forEach((section) => {
+      const rows = section.rows;
+      const [draggedRow] = rows.splice(dragIndex, 1);
+      rows.splice(hoverIndex, 0, draggedRow);
+    });
+
     return updated;
   });
 };
