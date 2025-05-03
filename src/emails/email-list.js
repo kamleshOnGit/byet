@@ -1,54 +1,57 @@
 // email/EmailList.js
 import React from 'react';
-import { Link } from 'react-router-dom';
-import { Button, Section, Text } from '@react-email/components'; // Importing react-email components
+import { Box, Button, Heading, Text, VStack } from '@chakra-ui/react';
 
 const EmailList = () => {
-  // Example email templates
   const emailTemplates = [
     {
       id: 1,
       name: 'Welcome Email',
       template: (
-        <Section>
+        <VStack spacing={4} align="start">
           <Text>Welcome to our service!</Text>
-          <Button href='https://example.com'>Get Started</Button>
-        </Section>
+          <Button colorScheme="teal" as="a" href="https://example.com">
+            Get Started
+          </Button>
+        </VStack>
       ),
     },
     {
       id: 2,
       name: 'Password Reset Email',
       template: (
-        <Section>
+        <VStack spacing={4} align="start">
           <Text>Click below to reset your password</Text>
-          <Button href='https://example.com/reset'>Reset Password</Button>
-        </Section>
+          <Button colorScheme="teal" as="a" href="https://example.com/reset">
+            Reset Password
+          </Button>
+        </VStack>
       ),
     },
   ];
 
   return (
-    <div>
-      <h2>Email Templates</h2>
-      <ul>
+    <Box p={4}>
+      <Heading as="h2" size="lg" mb={6}>
+        Email Templates
+      </Heading>
+      <VStack spacing={6} align="stretch">
         {emailTemplates.map((template) => (
-          <li key={template.id}>
-            <h3>{template.name}</h3>
-            {/* Render the email template preview using react-email components */}
-            <div
-              style={{
-                border: '1px solid #ccc',
-                padding: '10px',
-                marginBottom: '20px',
-              }}
-            >
-              {template.template}
-            </div>
-          </li>
+          <Box
+            key={template.id}
+            borderWidth="1px"
+            borderRadius="lg"
+            p={4}
+            boxShadow="sm"
+          >
+            <Heading as="h3" size="md" mb={4}>
+              {template.name}
+            </Heading>
+            {template.template}
+          </Box>
         ))}
-      </ul>
-    </div>
+      </VStack>
+    </Box>
   );
 };
 
