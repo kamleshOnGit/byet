@@ -122,7 +122,7 @@ const DraggableComponentInColumn = ({ component, index, columnId, setComponents,
         cursor: 'grab',
       }}
     >
-      <EmailComponent component={component} setComponents={setComponents} />
+      <EmailComponent component={component} setSections={setComponents} parentId={parentId} rowId={rowId} columnId={columnId} />
     </Box>
   );
 };
@@ -187,7 +187,7 @@ const DroppableColumn = ({ column, setComponents, colSpan, parentId, rowId }) =>
 
 // Droppable Row Component
 const DroppableRow = ({ row, setComponents, parentId, index, moveRow }) => {
-  const [, drag, preview] = useDrag({
+  const [, drag] = useDrag({
     type: 'ROW',
     item: { index },
   });
@@ -304,28 +304,41 @@ const DroppableSection = ({ section, setComponents }) => {
 };
 
 // Email Components Renderer with Editable Fields
-const EmailComponent = ({ component, setComponents }) => {
+const updateComponent = (updatedComponent, parentId, rowId, columnId, setSections) => {
+  setSections((prevSections) => {
+    const updated = [...prevSections];
+    const sectionIndex = updated.findIndex((s) => s.id === parentId);
+    const rowIndex = updated[sectionIndex].rows.findIndex((r) => r.id === rowId);
+    const columnIndex = updated[sectionIndex].rows[rowIndex].columns.findIndex((c) => c.id === columnId);
+
+    const components = updated[sectionIndex].rows[rowIndex].columns[columnIndex].components;
+    const componentIndex = components.findIndex((comp) => comp.id === updatedComponent.id);
+    components[componentIndex] = updatedComponent;
+
+    return updated;
+  });
+};
+
+const EmailComponent = ({ component, setSections, parentId, rowId, columnId }) => {
   const { type, content, imageUrl, linkUrl } = component;
 
   const handleChange = (e) => {
     const updatedComponent = { ...component, content: e.target.value };
-    setComponents((prev) =>
-      prev.map((comp) => (comp.id === component.id ? updatedComponent : comp))
-    );
+    updateComponent(updatedComponent, parentId, rowId, columnId, setSections);
   };
 
   const handleImageUrlChange = (e) => {
     const updatedComponent = { ...component, imageUrl: e.target.value };
-    setComponents((prev) =>
-      prev.map((comp) => (comp.id === component.id ? updatedComponent : comp))
-    );
+    updateComponent(updatedComponent, parentId, rowId, columnId, setSections);
   };
 
   const handleLinkUrlChange = (e) => {
     const updatedComponent = { ...component, linkUrl: e.target.value };
-    setComponents((prev) =>
-      prev.map((comp) => (comp.id === component.id ? updatedComponent : comp))
-    );
+    updateComponent(updatedComponent, parentId, rowId, columnId, setSections);
+  };
+
+  const handleLinkClick = (e) => {
+    e.preventDefault(); // Prevent redirection
   };
 
   const renderContent = () => {
@@ -370,7 +383,7 @@ const EmailComponent = ({ component, setComponents }) => {
         );
       case COMPONENT_TYPES.LINK:
         return (
-          <Link href={linkUrl || 'https://example.com'} color="teal.500">
+          <Link href={linkUrl || 'https://example.com'} color="teal.500" onClick={handleLinkClick}>
             <input
               type="text"
               value={content || 'Visit our site'}
@@ -499,7 +512,7 @@ const CreateTemplate = () => {
               <DroppableSection
                 key={section.id}
                 section={section}
-                setComponents={setSections}
+                setComponents={setSections} // Pass 'setSections' as 'setComponents'
               />
             ))}
             <IconButton
