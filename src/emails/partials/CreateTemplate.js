@@ -7,95 +7,145 @@ import EditorTabs from './EditorTabs';
 import DroppableSection from './DroppableSection';
 import { COMPONENT_TYPES } from './componentTypes';
 
+const initialSections = () => [
+  {
+    id: Date.now(),
+    rows: [
+      {
+        id: Date.now() + 1,
+        settings: {
+          padding: { top: 10, right: 10, bottom: 10, left: 10 },
+          margin: { top: 0, right: 0, bottom: 0, left: 0 },
+          backgroundColor: '#ffffff',
+          border: 'none',
+          borderColor: '#dddddd',
+        },
+        columns: [
+          {
+            id: Date.now() + 2,
+            label: 'Column 1',
+            size: 6,
+            settings: {
+              padding: { top: 10, right: 10, bottom: 10, left: 10 },
+              margin: { top: 0, right: 0, bottom: 0, left: 0 },
+              backgroundColor: '#ffffff',
+              border: 'none',
+              borderColor: '#cccccc',
+            },
+            components: [
+              {
+                id: Date.now() + 4,
+                type: COMPONENT_TYPES.TEXT,
+                content: 'Welcome to the Email Editor!',
+                settings: {
+                  padding: { top: 10, right: 10, bottom: 10, left: 10 },
+                  margin: { top: 0, right: 0, bottom: 0, left: 0 },
+                  fontSize: 'md',
+                  fontWeight: 'normal',
+                  textAlign: 'left',
+                  textColor: '#000000',
+                  backgroundColor: '#ffffff',
+                  border: 'none',
+                },
+              },
+            ],
+          },
+          {
+            id: Date.now() + 3,
+            label: 'Column 2',
+            size: 6,
+            settings: {
+              padding: { top: 10, right: 10, bottom: 10, left: 10 },
+              margin: { top: 0, right: 0, bottom: 0, left: 0 },
+              backgroundColor: '#ffffff',
+              border: 'none',
+              borderColor: '#cccccc',
+            },
+            components: [
+              {
+                id: Date.now() + 5,
+                type: COMPONENT_TYPES.BUTTON,
+                content: 'Click Me',
+                settings: {
+                  padding: { top: 10, right: 20, bottom: 10, left: 20 },
+                  margin: { top: 0, right: 0, bottom: 0, left: 0 },
+                  fontSize: 'md',
+                  fontWeight: 'normal',
+                  textAlign: 'center',
+                  textColor: '#ffffff',
+                  backgroundColor: '#0066cc',
+                  width: 'auto',
+                  height: 'auto',
+                  border: 'none',
+                  borderRadius: 4,
+                  buttonColor: '#0066cc',
+                  buttonTextColor: '#ffffff',
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+];
+
+const locateTarget = (sections, target) => {
+  if (!target) return null;
+  const { kind, id } = target;
+  for (const section of sections) {
+    for (const row of section.rows) {
+      if (kind === 'row' && row.id === id) {
+        return { ...target, sectionId: section.id, data: row };
+      }
+      for (const column of row.columns) {
+        if (kind === 'column' && column.id === id) {
+          return { ...target, sectionId: section.id, rowId: row.id, data: column };
+        }
+        if (kind === 'component') {
+          const found = column.components.find((comp) => comp.id === id);
+          if (found) {
+            return {
+              ...target,
+              sectionId: section.id,
+              rowId: row.id,
+              columnId: column.id,
+              data: found,
+            };
+          }
+        }
+      }
+    }
+  }
+  return null;
+};
+
+const getInitialComponentTarget = (sections) => {
+  const section = sections[0];
+  const row = section?.rows?.[0];
+  const column = row?.columns?.[0];
+  const component = column?.components?.[0];
+  if (!component) return null;
+  return {
+    kind: 'component',
+    id: component.id,
+    sectionId: section.id,
+    rowId: row.id,
+    columnId: column.id,
+    data: component,
+  };
+};
+
 // Main CreateTemplate Component
 const CreateTemplate = () => {
-  const [sections, setSections] = useState([
-    {
-      id: Date.now(),
-      rows: [
-        {
-          id: Date.now() + 1,
-          columns: [
-            {
-              id: Date.now() + 2,
-              label: 'Column 1',
-              size: 6,
-              components: [
-                { 
-                  id: Date.now() + 4, 
-                  type: COMPONENT_TYPES.TEXT, 
-                  content: 'Welcome to the Email Editor!',
-                  // Add default styling properties
-                  settings: {
-                    padding: { top: 10, right: 10, bottom: 10, left: 10 },
-                    margin: { top: 0, right: 0, bottom: 0, left: 0 },
-                    fontSize: 'md',
-                    fontWeight: 'normal',
-                    textAlign: 'left',
-                    textColor: '#000000',
-                    backgroundColor: '#ffffff',
-                    width: '100%',
-                    height: 'auto',
-                    border: 'none',
-                    borderColor: '#000000',
-                    borderWidth: 0,
-                    borderRadius: 0,
-                  }
-                },
-              ],
-            },
-            {
-              id: Date.now() + 3,
-              label: 'Column 2',
-              size: 6,
-              components: [
-                { 
-                  id: Date.now() + 5, 
-                  type: COMPONENT_TYPES.BUTTON, 
-                  content: 'Click Me',
-                  // Add default styling properties
-                  settings: {
-                    padding: { top: 10, right: 20, bottom: 10, left: 20 },
-                    margin: { top: 0, right: 0, bottom: 0, left: 0 },
-                    fontSize: 'md',
-                    fontWeight: 'normal',
-                    textAlign: 'center',
-                    textColor: '#ffffff',
-                    backgroundColor: '#0066cc',
-                    width: 'auto',
-                    height: 'auto',
-                    border: 'none',
-                    borderColor: '#0066cc',
-                    borderWidth: 0,
-                    borderRadius: 4,
-                    buttonColor: '#0066cc',
-                    buttonTextColor: '#ffffff',
-                  }
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    },
-  ]);
+  const [sections, setSections] = useState(initialSections());
+  const [selectedTarget, setSelectedTarget] = useState(() => getInitialComponentTarget(sections));
 
   // Add state to toggle between Editor View and Code Preview
   const [isEditorView, setIsEditorView] = useState(true);
   // Add state for HTML content and browser view toggle
   const [htmlContent, setHtmlContent] = useState('<div>Write your HTML here</div>');
   const [isBrowserView, setIsBrowserView] = useState(false);
-  // Add state to track selected component
-  const [selectedComponent, setSelectedComponent] = useState(() => {
-    // Set the first component as selected by default
-    if (sections && sections.length > 0 && 
-        sections[0].rows && sections[0].rows.length > 0 &&
-        sections[0].rows[0].columns && sections[0].rows[0].columns.length > 0 &&
-        sections[0].rows[0].columns[0].components && sections[0].rows[0].columns[0].components.length > 0) {
-      return sections[0].rows[0].columns[0].components[0];
-    }
-    return null;
-  });
 
   // Ensure updateSections is defined in the correct scope
   const updateSections = (updater) => {
@@ -283,6 +333,10 @@ const CreateTemplate = () => {
   }, [sections]);
 
   useEffect(() => {
+    setSelectedTarget((prev) => locateTarget(sections, prev));
+  }, [sections]);
+
+  useEffect(() => {
     console.log('Sections updated, syncing HTML...'); // Log when sections are updated
     syncEditorToHtml();
   }, [sections, syncEditorToHtml]);
@@ -317,37 +371,66 @@ const CreateTemplate = () => {
     console.log('Saved Template:', sections);
   }
 
-  // Handle component updates from settings panel
-  const handleComponentUpdate = (updatedComponent) => {
-    if (!selectedComponent) return;
-    
+  const handleTargetUpdate = (updatedTarget) => {
+    if (!updatedTarget) return;
+
     updateSections((prevSections) => {
       const updated = [...prevSections];
-      
-      // Find the section, row, and column containing the component
-      for (let s = 0; s < updated.length; s++) {
-        const section = updated[s];
-        for (let r = 0; r < section.rows.length; r++) {
-          const row = section.rows[r];
-          for (let c = 0; c < row.columns.length; c++) {
-            const column = row.columns[c];
-            const componentIndex = column.components.findIndex(comp => comp.id === updatedComponent.id);
-            if (componentIndex !== -1) {
-              // Update the component
-              updated[s].rows[r].columns[c].components[componentIndex] = updatedComponent;
-              // Also update the selected component if it's the same one
-              if (selectedComponent.id === updatedComponent.id) {
-                setSelectedComponent(updatedComponent);
+
+      if (updatedTarget.kind === 'component') {
+        for (let s = 0; s < updated.length; s++) {
+          const section = updated[s];
+          for (let r = 0; r < section.rows.length; r++) {
+            const row = section.rows[r];
+            for (let c = 0; c < row.columns.length; c++) {
+              const column = row.columns[c];
+              const componentIndex = column.components.findIndex((comp) => comp.id === updatedTarget.id);
+              if (componentIndex !== -1) {
+                updated[s].rows[r].columns[c].components[componentIndex] = {
+                  ...updated[s].rows[r].columns[c].components[componentIndex],
+                  settings: updatedTarget.settings,
+                };
+                return updated;
               }
+            }
+          }
+        }
+      }
+
+      if (updatedTarget.kind === 'column') {
+        for (let s = 0; s < updated.length; s++) {
+          const section = updated[s];
+          for (let r = 0; r < section.rows.length; r++) {
+            const row = section.rows[r];
+            const columnIndex = row.columns.findIndex((col) => col.id === updatedTarget.id);
+            if (columnIndex !== -1) {
+              updated[s].rows[r].columns[columnIndex] = {
+                ...updated[s].rows[r].columns[columnIndex],
+                settings: updatedTarget.settings,
+              };
               return updated;
             }
           }
         }
       }
-      
+
+      if (updatedTarget.kind === 'row') {
+        for (let s = 0; s < updated.length; s++) {
+          const section = updated[s];
+          const rowIndex = section.rows.findIndex((row) => row.id === updatedTarget.id);
+          if (rowIndex !== -1) {
+            updated[s].rows[rowIndex] = {
+              ...updated[s].rows[rowIndex],
+              settings: updatedTarget.settings,
+            };
+            return updated;
+          }
+        }
+      }
+
       return updated;
     });
-  };;
+  };
 
   return (
     <DndProvider backend={HTML5Backend}>
@@ -366,8 +449,8 @@ const CreateTemplate = () => {
                   setComponents={setSections} // Pass 'setSections' as 'setComponents'
                   updateSections={updateSections} // Pass updateSections explicitly
                   syncEditorToHtml={syncEditorToHtml} // Pass syncEditorToHtml explicitly
-                  onSelect={setSelectedComponent} // Pass setSelectedComponent as onSelect
-                  selectedComponent={selectedComponent} // Pass selectedComponent
+                  onSelect={setSelectedTarget}
+                  selectedTarget={selectedTarget}
                 />
               ))}
               <IconButton
@@ -415,8 +498,8 @@ const CreateTemplate = () => {
           {/* Right: Editor Tabs */}
           <Box w="20%" p={0} bg="white" borderLeftWidth="1px" minHeight="400px" boxShadow="md">
             <EditorTabs 
-              selectedComponent={selectedComponent} 
-              onComponentUpdate={handleComponentUpdate} 
+              selectedTarget={selectedTarget}
+              onTargetUpdate={handleTargetUpdate}
             />
           </Box>
         </Box>

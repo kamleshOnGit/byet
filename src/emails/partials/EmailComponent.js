@@ -18,7 +18,7 @@ const updateComponent = (updatedComponent, parentId, rowId, columnId, setSection
   });
 };
 
-const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onSelect, selectedComponent }) => {
+const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onSelect, selectedTarget }) => {
   const { type, content } = component;
 
   const handleChange = (e) => {
@@ -27,35 +27,22 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
     updateComponent(updatedComponent, parentId, rowId, columnId, setSections);
   };
 
-  const handleSelect = () => {
+  const handleSelect = (e) => {
+    if (e?.stopPropagation) {
+      e.stopPropagation();
+    }
     if (onSelect) {
-      onSelect(component);
+      onSelect({
+        kind: 'component',
+        id: component.id,
+        data: component,
+      });
     }
   };
 
   // Apply styles from component settings
   const applyComponentStyles = () => {
-    if (!component.settings) return {};
-    
-    const { padding, margin, backgroundColor, width, height, border, borderColor, borderWidth, borderRadius, fontSize, fontWeight, textAlign, textColor } = component.settings;
-    
-    const styles = {
-      padding: `${padding.top}px ${padding.right}px ${padding.bottom}px ${padding.left}px`,
-      margin: `${margin.top}px ${margin.right}px ${margin.bottom}px ${margin.left}px`,
-      backgroundColor: backgroundColor || '#ffffff',
-      width: width || '100%',
-      height: height || 'auto',
-      border: border !== 'none' ? `${borderWidth || 0}px ${border || 'solid'} ${borderColor || '#000000'}` : 'none',
-      borderRadius: `${borderRadius || 0}px`,
-    };
-    
-    // Add text styles if they exist
-    if (fontSize) styles.fontSize = fontSize;
-    if (fontWeight) styles.fontWeight = fontWeight;
-    if (textAlign) styles.textAlign = textAlign;
-    if (textColor) styles.color = textColor;
-    
-    return styles;
+    return {};
   };
   
   const renderContent = () => {
@@ -357,7 +344,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
   };
 
   // Check if this component is selected
-  const isSelected = selectedComponent && selectedComponent.id === component.id;
+  const isSelected = selectedTarget?.kind === 'component' && selectedTarget?.id === component.id;
   
   return (
     <Box 

@@ -5,7 +5,7 @@ import { COMPONENT_TYPES } from './componentTypes';
 import { columnParentStyle } from './componentStyles';
 import DraggableComponentInColumn from './DraggableComponentInColumn';
 
-const DroppableColumn = ({ column, colSpan, parentId, rowId, updateSections, syncEditorToHtml, onSelect, selectedComponent }) => {
+const DroppableColumn = ({ column, colSpan, parentId, rowId, updateSections, syncEditorToHtml, onSelect, selectedTarget }) => {
   console.log('DroppableColumn received syncEditorToHtml:', typeof syncEditorToHtml);
 
   const [, drop] = useDrop({
@@ -64,12 +64,19 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, updateSections, syn
           textAlign: 'left',
           textColor: '#000000',
           backgroundColor: '#ffffff',
+          backgroundImage: '',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
           width: '100%',
           height: 'auto',
           border: 'none',
           borderColor: '#000000',
           borderWidth: 0,
           borderRadius: 0,
+          boxSizing: 'border-box',
+          letterSpacing: 'normal',
+          lineHeight: 'normal',
         }
       };
       updateSections((prevSections) => {
@@ -92,17 +99,34 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, updateSections, syn
       } else {
         console.error('syncEditorToHtml is not a function');
       }
+
+      return { droppedInColumn: true };
     },
   });
 
   // Check if this column is selected (when no component is selected but column itself might be)
   // For now, we'll just focus on component selection visualization
+  const isSelected = selectedTarget?.kind === 'column' && selectedTarget?.id === column.id;
+
+  const handleSelectColumn = (e) => {
+    e.stopPropagation();
+    if (onSelect) {
+      onSelect({
+        kind: 'column',
+        id: column.id,
+        data: column,
+      });
+    }
+  };
   
   return (
     <Box
       ref={drop}
+      onClick={handleSelectColumn}
       style={{
         ...columnParentStyle(colSpan),
+        border: isSelected ? '2px solid #3182ce' : columnParentStyle(colSpan).border,
+        borderRadius: '6px',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'flex-start',
@@ -121,7 +145,7 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, updateSections, syn
             rowId={rowId}
             updateSections={updateSections}
             onSelect={onSelect}
-            selectedComponent={selectedComponent}
+            selectedTarget={selectedTarget}
           />
         ))}
     </Box>

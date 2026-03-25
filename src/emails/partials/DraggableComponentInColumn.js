@@ -3,7 +3,7 @@ import { Box } from '@chakra-ui/react';
 import { useDrag, useDrop } from 'react-dnd';
 import EmailComponent from './EmailComponent';
 
-const DraggableComponentInColumn = ({ component, index, columnId, parentId, rowId, updateSections, onSelect, selectedComponent }) => {
+const DraggableComponentInColumn = ({ component, index, columnId, parentId, rowId, updateSections, onSelect, selectedTarget }) => {
   const [, drag] = useDrag({
     type: 'COMPONENT',
     item: { index },
@@ -31,7 +31,7 @@ const DraggableComponentInColumn = ({ component, index, columnId, parentId, rowI
   });
 
   // Check if this component is selected
-  const isSelected = selectedComponent && selectedComponent.id === component.id;
+  const isSelected = selectedTarget?.kind === 'component' && selectedTarget?.id === component.id;
   
   return (
     <Box
@@ -52,7 +52,7 @@ const DraggableComponentInColumn = ({ component, index, columnId, parentId, rowI
         columnId={columnId}
         setSections={updateSections} // Pass updateSections instead of setSections
         onSelect={onSelect}
-        selectedComponent={selectedComponent}
+        selectedTarget={selectedTarget}
       />
     </Box>
   );

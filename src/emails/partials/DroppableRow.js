@@ -1,29 +1,11 @@
 import React from 'react';
-import { Box, IconButton, Menu, MenuButton, MenuList, MenuItem } from '@chakra-ui/react';
+import { Box, IconButton } from '@chakra-ui/react';
 import { DragHandleIcon, AddIcon, DeleteIcon } from '@chakra-ui/icons';
 import { useDrag, useDrop } from 'react-dnd';
 import { rowStyle } from './componentStyles';
 import DroppableColumn from './DroppableColumn';
 
 // Utility Functions
-const addColumn = (size, row, setComponents, parentId) => {
-  if (row.columns.reduce((sum, col) => sum + col.size, 0) + size <= 12) {
-    const newColumn = {
-      id: Date.now(),
-      label: `Column ${row.columns.length + 1}`,
-      size,
-      components: [],
-    };
-    setComponents((prevSections) => {
-      const updated = [...prevSections];
-      const sectionIndex = updated.findIndex((s) => s.id === parentId);
-      const rowIndex = updated[sectionIndex].rows.findIndex((r) => r.id === row.id);
-      updated[sectionIndex].rows[rowIndex].columns.push(newColumn);
-      return updated;
-    });
-  }
-};
-
 const removeRow = (row, setComponents, parentId) => {
   setComponents((prevSections) => {
     const updated = [...prevSections];
@@ -48,7 +30,7 @@ const moveRow = (dragIndex, hoverIndex, setComponents) => {
 };
 
 // Droppable Row Component
-const DroppableRow = ({ row, setComponents, parentId, index, moveRow, updateSections, syncEditorToHtml, onSelect, selectedComponent }) => {
+const DroppableRow = ({ row, setComponents, parentId, index, moveRow, updateSections, syncEditorToHtml, onSelect, selectedTarget }) => {
   console.log('DroppableRow received syncEditorToHtml:', typeof syncEditorToHtml);
 
   const [, drag] = useDrag({
@@ -89,11 +71,26 @@ const DroppableRow = ({ row, setComponents, parentId, index, moveRow, updateSect
     });
   };
 
+  const isSelected = selectedTarget?.kind === 'row' && selectedTarget?.id === row.id;
+
+  const handleSelectRow = (e) => {
+    e.stopPropagation();
+    if (onSelect) {
+      onSelect({
+        kind: 'row',
+        id: row.id,
+        data: row,
+      });
+    }
+  };
+
   return (
     <Box
       ref={(node) => drag(drop(node))}
+      onClick={handleSelectRow}
       style={{
         ...rowStyle,
+        border: isSelected ? '2px solid #3182ce' : rowStyle.border,
       }}
     >
       <Box position="absolute" top="2px" left="2px">
@@ -110,19 +107,25 @@ const DroppableRow = ({ row, setComponents, parentId, index, moveRow, updateSect
           updateSections={updateSections}
           syncEditorToHtml={syncEditorToHtml} // Pass syncEditorToHtml explicitly
           onSelect={onSelect}
-          selectedComponent={selectedComponent}
+          selectedTarget={selectedTarget}
         />
       ))}
       <Box position="absolute" top="2px" right="2px">
         <IconButton
-          onClick={duplicateRow}
+          onClick={(e) => {
+            e.stopPropagation();
+            duplicateRow();
+          }}
           colorScheme="blue"
           size="xs"
           icon={<AddIcon />}
           ml={2}
         />
         <IconButton
-          onClick={() => removeRow(row, setComponents, parentId)}
+          onClick={(e) => {
+            e.stopPropagation();
+            removeRow(row, setComponents, parentId);
+          }}
           colorScheme="red"
           size="xs"
           icon={<DeleteIcon />}

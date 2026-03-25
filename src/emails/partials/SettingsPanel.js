@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Text, Input, Select, Slider, SliderTrack, SliderFilledTrack, SliderThumb, Switch, Divider, Button } from '@chakra-ui/react';
+import { Box, Text, Input, Select, Slider, SliderTrack, SliderFilledTrack, SliderThumb, Divider, Button } from '@chakra-ui/react';
 
-const SettingsPanel = ({ selectedComponent, onUpdateComponent }) => {
+const SettingsPanel = ({ selectedTarget, onUpdateTarget }) => {
   const [settings, setSettings] = useState({
     // Padding and margin
     padding: { top: 0, right: 0, bottom: 0, left: 0 },
@@ -15,6 +15,10 @@ const SettingsPanel = ({ selectedComponent, onUpdateComponent }) => {
     
     // Background
     backgroundColor: '#ffffff',
+    backgroundImage: '',
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    backgroundRepeat: 'no-repeat',
     
     // Dimensions
     width: '100%',
@@ -25,6 +29,13 @@ const SettingsPanel = ({ selectedComponent, onUpdateComponent }) => {
     borderColor: '#000000',
     borderWidth: 0,
     borderRadius: 0,
+
+    // Typography
+    letterSpacing: 'normal',
+    lineHeight: 'normal',
+
+    // Layout
+    boxSizing: 'border-box',
     
     // Link specific
     linkColor: '#0066cc',
@@ -36,7 +47,7 @@ const SettingsPanel = ({ selectedComponent, onUpdateComponent }) => {
 
   // Update settings when selected component changes
   useEffect(() => {
-    if (selectedComponent && selectedComponent.settings) {
+    if (selectedTarget?.data?.settings) {
       setSettings({
         // Start with default settings
         padding: { top: 0, right: 0, bottom: 0, left: 0 },
@@ -46,30 +57,37 @@ const SettingsPanel = ({ selectedComponent, onUpdateComponent }) => {
         textAlign: 'left',
         textColor: '#000000',
         backgroundColor: '#ffffff',
+        backgroundImage: '',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
         width: '100%',
         height: 'auto',
         border: 'none',
         borderColor: '#000000',
         borderWidth: 0,
         borderRadius: 0,
+        letterSpacing: 'normal',
+        lineHeight: 'normal',
+        boxSizing: 'border-box',
         linkColor: '#0066cc',
         buttonColor: '#0066cc',
         buttonTextColor: '#ffffff',
-        // Then override with component settings
-        ...selectedComponent.settings
+        // Then override with target settings
+        ...selectedTarget.data.settings
       });
     }
-  }, [selectedComponent]);
+  }, [selectedTarget]);
 
   const handleSettingChange = (key, value) => {
     const newSettings = { ...settings, [key]: value };
     setSettings(newSettings);
     
-    // Update the component if onUpdateComponent is provided
-    if (onUpdateComponent && selectedComponent) {
-      onUpdateComponent({
-        ...selectedComponent,
-        settings: newSettings
+    // Update the target if onUpdateTarget is provided
+    if (onUpdateTarget && selectedTarget) {
+      onUpdateTarget({
+        ...selectedTarget,
+        settings: newSettings,
       });
     }
   };
@@ -84,20 +102,24 @@ const SettingsPanel = ({ selectedComponent, onUpdateComponent }) => {
     handleSettingChange('margin', newMargin);
   };
 
-  if (!selectedComponent) {
+  if (!selectedTarget) {
     return (
       <Box w="100%" h="100%" p={4} display="flex" alignItems="center" justifyContent="center">
         <Text textAlign="center" color="gray.500">
-          Select a component to edit its settings
+          Select a row, column, or component to edit its settings
         </Text>
       </Box>
     );
   }
 
+  const targetLabel = selectedTarget.kind === 'component'
+    ? selectedTarget.data?.type
+    : selectedTarget.kind;
+
   return (
     <Box w="100%" h="100%" p={4} overflowY="auto">
       <Text fontSize="lg" fontWeight="bold" mb={4}>
-        {selectedComponent.type} Settings
+        {targetLabel} Settings
       </Text>
       
       <Divider mb={4} />
@@ -266,6 +288,58 @@ const SettingsPanel = ({ selectedComponent, onUpdateComponent }) => {
           size="sm" 
         />
       </Box>
+
+      <Box mb={3}>
+        <Text fontSize="xs" mb={1}>Background Image URL</Text>
+        <Input
+          value={settings.backgroundImage}
+          onChange={(e) => handleSettingChange('backgroundImage', e.target.value)}
+          size="sm"
+          placeholder="https://..."
+        />
+      </Box>
+
+      <Box mb={3}>
+        <Text fontSize="xs" mb={1}>Background Size</Text>
+        <Select
+          value={settings.backgroundSize}
+          onChange={(e) => handleSettingChange('backgroundSize', e.target.value)}
+          size="sm"
+        >
+          <option value="cover">Cover</option>
+          <option value="contain">Contain</option>
+          <option value="auto">Auto</option>
+        </Select>
+      </Box>
+
+      <Box mb={3}>
+        <Text fontSize="xs" mb={1}>Background Position</Text>
+        <Select
+          value={settings.backgroundPosition}
+          onChange={(e) => handleSettingChange('backgroundPosition', e.target.value)}
+          size="sm"
+        >
+          <option value="center">Center</option>
+          <option value="top">Top</option>
+          <option value="bottom">Bottom</option>
+          <option value="left">Left</option>
+          <option value="right">Right</option>
+        </Select>
+      </Box>
+
+      <Box mb={3}>
+        <Text fontSize="xs" mb={1}>Background Repeat</Text>
+        <Select
+          value={settings.backgroundRepeat}
+          onChange={(e) => handleSettingChange('backgroundRepeat', e.target.value)}
+          size="sm"
+        >
+          <option value="no-repeat">No Repeat</option>
+          <option value="repeat">Repeat</option>
+          <option value="repeat-x">Repeat X</option>
+          <option value="repeat-y">Repeat Y</option>
+        </Select>
+      </Box>
       
       <Divider my={4} />
       
@@ -307,57 +381,93 @@ const SettingsPanel = ({ selectedComponent, onUpdateComponent }) => {
           <option value="double">Double</option>
         </Select>
       </Box>
+
+      <Box mb={3}>
+        <Text fontSize="xs" mb={1}>Border Color</Text>
+        <Input 
+          type="color" 
+          value={settings.borderColor} 
+          onChange={(e) => handleSettingChange('borderColor', e.target.value)}
+          size="sm" 
+        />
+      </Box>
       
-      {settings.border !== 'none' && (
-        <>
-          <Box mb={3}>
-            <Text fontSize="xs" mb={1}>Border Color</Text>
-            <Input 
-              type="color" 
-              value={settings.borderColor} 
-              onChange={(e) => handleSettingChange('borderColor', e.target.value)}
-              size="sm" 
-            />
-          </Box>
-          
-          <Box mb={3}>
-            <Text fontSize="xs" mb={1}>Border Width</Text>
-            <Slider 
-              value={settings.borderWidth} 
-              onChange={(val) => handleSettingChange('borderWidth', val)} 
-              min={0} 
-              max={10}
-            >
-              <SliderTrack>
-                <SliderFilledTrack />
-              </SliderTrack>
-              <SliderThumb />
-            </Slider>
-            <Text fontSize="xs" textAlign="center">{settings.borderWidth}px</Text>
-          </Box>
-          
-          <Box mb={3}>
-            <Text fontSize="xs" mb={1}>Border Radius</Text>
-            <Slider 
-              value={settings.borderRadius} 
-              onChange={(val) => handleSettingChange('borderRadius', val)} 
-              min={0} 
-              max={50}
-            >
-              <SliderTrack>
-                <SliderFilledTrack />
-              </SliderTrack>
-              <SliderThumb />
-            </Slider>
-            <Text fontSize="xs" textAlign="center">{settings.borderRadius}px</Text>
-          </Box>
-        </>
-      )}
+      <Box mb={3}>
+        <Text fontSize="xs" mb={1}>Border Width</Text>
+        <Slider 
+          value={settings.borderWidth} 
+          onChange={(val) => handleSettingChange('borderWidth', val)} 
+          min={0} 
+          max={10}
+        >
+          <SliderTrack>
+            <SliderFilledTrack />
+          </SliderTrack>
+          <SliderThumb />
+        </Slider>
+        <Text fontSize="xs" textAlign="center">{settings.borderWidth}px</Text>
+      </Box>
+      
+      <Box mb={3}>
+        <Text fontSize="xs" mb={1}>Border Radius</Text>
+        <Slider 
+          value={settings.borderRadius} 
+          onChange={(val) => handleSettingChange('borderRadius', val)} 
+          min={0} 
+          max={50}
+        >
+          <SliderTrack>
+            <SliderFilledTrack />
+          </SliderTrack>
+          <SliderThumb />
+        </Slider>
+        <Text fontSize="xs" textAlign="center">{settings.borderRadius}px</Text>
+      </Box>
       
       <Divider my={4} />
       
+      {/* Typography */}
+      <Text fontSize="md" fontWeight="semibold" mb={2}>Typography</Text>
+      <Box mb={3}>
+        <Text fontSize="xs" mb={1}>Letter Spacing</Text>
+        <Input
+          value={settings.letterSpacing}
+          onChange={(e) => handleSettingChange('letterSpacing', e.target.value)}
+          size="sm"
+          placeholder="normal / 0.5px"
+        />
+      </Box>
+
+      <Box mb={3}>
+        <Text fontSize="xs" mb={1}>Line Height</Text>
+        <Input
+          value={settings.lineHeight}
+          onChange={(e) => handleSettingChange('lineHeight', e.target.value)}
+          size="sm"
+          placeholder="normal / 1.5 / 20px"
+        />
+      </Box>
+
+      <Divider my={4} />
+
+      {/* Layout */}
+      <Text fontSize="md" fontWeight="semibold" mb={2}>Layout</Text>
+      <Box mb={3}>
+        <Text fontSize="xs" mb={1}>Box Sizing</Text>
+        <Select
+          value={settings.boxSizing}
+          onChange={(e) => handleSettingChange('boxSizing', e.target.value)}
+          size="sm"
+        >
+          <option value="border-box">Border Box</option>
+          <option value="content-box">Content Box</option>
+        </Select>
+      </Box>
+
+      <Divider my={4} />
+
       {/* Component Specific Settings */}
-      {selectedComponent.type === 'Button' && (
+      {selectedTarget.kind === 'component' && selectedTarget.data?.type === 'Button' && (
         <>
           <Text fontSize="md" fontWeight="semibold" mb={2}>Button Settings</Text>
           <Box mb={3}>
@@ -381,7 +491,7 @@ const SettingsPanel = ({ selectedComponent, onUpdateComponent }) => {
         </>
       )}
       
-      {selectedComponent.type === 'Link' && (
+      {selectedTarget.kind === 'component' && selectedTarget.data?.type === 'Link' && (
         <>
           <Text fontSize="md" fontWeight="semibold" mb={2}>Link Settings</Text>
           <Box mb={3}>
@@ -410,23 +520,30 @@ const SettingsPanel = ({ selectedComponent, onUpdateComponent }) => {
             textAlign: 'left',
             textColor: '#000000',
             backgroundColor: '#ffffff',
+            backgroundImage: '',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
             width: '100%',
             height: 'auto',
             border: 'none',
             borderColor: '#000000',
             borderWidth: 0,
             borderRadius: 0,
+            letterSpacing: 'normal',
+            lineHeight: 'normal',
+            boxSizing: 'border-box',
             linkColor: '#0066cc',
             buttonColor: '#0066cc',
             buttonTextColor: '#ffffff',
           };
           setSettings(defaultSettings);
           
-          // Update the component if onUpdateComponent is provided
-          if (onUpdateComponent && selectedComponent) {
-            onUpdateComponent({
-              ...selectedComponent,
-              settings: defaultSettings
+          // Update the target if onUpdateTarget is provided
+          if (onUpdateTarget && selectedTarget) {
+            onUpdateTarget({
+              ...selectedTarget,
+              settings: defaultSettings,
             });
           }
         }}
