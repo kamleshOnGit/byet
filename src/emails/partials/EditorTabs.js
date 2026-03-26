@@ -4,7 +4,7 @@ import DraggableComponents from './DraggableComponents';
 import RowLayouts from './RowLayouts';
 import SettingsPanel from './SettingsPanel';
 
-const EditorTabs = ({ selectedTarget, onTargetUpdate }) => {
+const EditorTabs = ({ selectedTarget, onTargetUpdate, templateSettings, onTemplateSettingsChange }) => {
   const [activeTab, setActiveTab] = useState(0);
 
   // Tab configuration
@@ -22,6 +22,8 @@ const EditorTabs = ({ selectedTarget, onTargetUpdate }) => {
       component: <SettingsPanel 
         selectedTarget={selectedTarget}
         onUpdateTarget={onTargetUpdate}
+        templateSettings={templateSettings}
+        onTemplateSettingsChange={onTemplateSettingsChange}
       />
     }
   ];

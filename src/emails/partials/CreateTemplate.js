@@ -141,6 +141,19 @@ const CreateTemplate = () => {
   const [sections, setSections] = useState(initialSections());
   const [selectedTarget, setSelectedTarget] = useState(() => getInitialComponentTarget(sections));
 
+  const [templateSettings, setTemplateSettings] = useState({
+    fontFamily: 'Arial, sans-serif',
+    fontSize: '14px',
+    fontWeight: 'normal',
+    lineHeight: '1.5',
+    textColor: '#000000',
+    bodyBackgroundColor: '#f5f5f5',
+    containerBackgroundColor: '#ffffff',
+    containerWidth: '600px',
+    containerMinHeight: 'auto',
+    containerPadding: '20px',
+  });
+
   // Add state to toggle between Editor View and Code Preview
   const [isEditorView, setIsEditorView] = useState(true);
   // Add state for HTML content and browser view toggle
@@ -177,160 +190,254 @@ const CreateTemplate = () => {
     console.log('syncEditorToHtml invoked');
     console.log('Current sections state:', JSON.stringify(sections, null, 2)); // Log sections for debugging
 
-    // Create a complete HTML document with proper styling
+    const escapeHtml = (text) => {
+      if (!text) return '';
+      return `${text}`
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    };
+
+    const safeNumber = (value, fallback) => {
+      const n = Number.parseInt(`${value}`.replace(/[^0-9]/g, ''), 10);
+      return Number.isFinite(n) ? n : fallback;
+    };
+
+    const containerWidthPx = safeNumber(templateSettings.containerWidth, 600);
+
+    const makePaddingStyle = (padding) => {
+      const t = padding?.top ?? 0;
+      const r = padding?.right ?? 0;
+      const b = padding?.bottom ?? 0;
+      const l = padding?.left ?? 0;
+      return `padding:${t}px ${r}px ${b}px ${l}px;`;
+    };
+
+    const makeBorderStyle = (s) => {
+      if (!s || s.border === 'none') return 'border:0;';
+      const w = Number.isFinite(s.borderWidth) ? s.borderWidth : 0;
+      return `border:${w}px ${s.border || 'solid'} ${s.borderColor || '#000000'};`;
+    };
+
+    const makeBackgroundStyle = (s) => {
+      if (!s) return '';
+      const bg = s.backgroundColor ? `background-color:${s.backgroundColor};` : '';
+      const bgImg = s.backgroundImage ? `background-image:url('${escapeHtml(s.backgroundImage)}');background-size:cover;background-position:center;background-repeat:no-repeat;` : '';
+      return `${bg}${bgImg}`;
+    };
+
+    const makeTextStyle = (s) => {
+      if (!s) return '';
+      const parts = [];
+      if (s.textAlign) parts.push(`text-align:${s.textAlign};`);
+      if (s.textColor) parts.push(`color:${s.textColor};`);
+      if (s.fontSize) parts.push(`font-size:${s.fontSize};`);
+      if (s.fontWeight) parts.push(`font-weight:${s.fontWeight};`);
+      if (s.lineHeight) parts.push(`line-height:${s.lineHeight};`);
+      if (s.letterSpacing) parts.push(`letter-spacing:${s.letterSpacing};`);
+      return parts.join('');
+    };
+
+    const renderComponent = (component) => {
+      const s = component?.settings || {};
+
+      const wrapperStyle = [
+        makePaddingStyle(s.padding),
+        makeBackgroundStyle(s),
+        makeTextStyle(s),
+        makeBorderStyle(s),
+        `border-radius:${s.borderRadius || 0}px;`,
+        'mso-line-height-rule:exactly;',
+      ].join('');
+
+      const spacerAfter = Number.isFinite(s?.margin?.bottom) ? s.margin.bottom : 15;
+
+      const wrap = (inner) => (
+        `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+          <tr>
+            <td style="${wrapperStyle}">
+              ${inner}
+            </td>
+          </tr>
+          <tr>
+            <td height="${spacerAfter}" style="font-size:${spacerAfter}px;line-height:${spacerAfter}px;">&nbsp;</td>
+          </tr>
+        </table>`
+      );
+
+      switch (component.type) {
+        case COMPONENT_TYPES.TEXT:
+          return wrap(`<div style="margin:0;">${escapeHtml(component.content) || ''}</div>`);
+        case COMPONENT_TYPES.HEADING:
+        case COMPONENT_TYPES.HEADER_1:
+          return wrap(`<h1 style="margin:0;">${escapeHtml(component.content) || ''}</h1>`);
+        case COMPONENT_TYPES.HEADER_2:
+          return wrap(`<h2 style="margin:0;">${escapeHtml(component.content) || ''}</h2>`);
+        case COMPONENT_TYPES.HEADER_3:
+          return wrap(`<h3 style="margin:0;">${escapeHtml(component.content) || ''}</h3>`);
+        case COMPONENT_TYPES.PARAGRAPH:
+          return wrap(`<p style="margin:0;">${escapeHtml(component.content) || ''}</p>`);
+        case COMPONENT_TYPES.ORDERED_LIST:
+          return wrap(
+            `<ol style="margin:0;padding-left:20px;${s.listStyleType ? `list-style-type:${escapeHtml(s.listStyleType)};` : ''}">${(component.content || '').split('\n').map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ol>`
+          );
+        case COMPONENT_TYPES.UNORDERED_LIST:
+          return wrap(
+            `<ul style="margin:0;padding-left:20px;${s.listStyleType ? `list-style-type:${escapeHtml(s.listStyleType)};` : ''}">${(component.content || '').split('\n').map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
+          );
+        case COMPONENT_TYPES.IMAGE:
+          return wrap(
+            `<img src="${escapeHtml(component.imageUrl) || ''}" alt="Image" width="${escapeHtml(component.imageWidth || '')}" style="display:block;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;" />`
+          );
+        case COMPONENT_TYPES.LINK:
+          return wrap(
+            `<a href="${escapeHtml(component.linkUrl) || '#'}" style="color:${s.linkColor || '#0066cc'};text-decoration:underline;">${escapeHtml(component.content) || ''}</a>`
+          );
+        case COMPONENT_TYPES.BUTTON: {
+          const buttonBg = escapeHtml(component.settings?.buttonColor) || '#0066cc';
+          const buttonText = escapeHtml(component.settings?.buttonTextColor) || '#ffffff';
+          const href = escapeHtml(component.linkUrl) || '#';
+          const label = escapeHtml(component.content) || 'Click Me';
+          return wrap(
+            `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:separate;">
+              <tr>
+                <td bgcolor="${buttonBg}" style="border-radius:4px;">
+                  <a href="${href}" target="_blank" style="display:inline-block;padding:10px 20px;color:${buttonText};text-decoration:none;font-weight:600;background-color:${buttonBg};border-radius:4px;">${label}</a>
+                </td>
+              </tr>
+            </table>`
+          );
+        }
+        default:
+          return wrap(`<div style="margin:0;">${escapeHtml(component.content) || ''}</div>`);
+      }
+    };
+
+    const makeColumnTdStyle = (column) => {
+      const s = column?.settings || {};
+      const parts = [];
+      parts.push(makePaddingStyle(s.padding));
+      parts.push(makeBackgroundStyle(s));
+      parts.push(makeTextStyle(s));
+      parts.push(makeBorderStyle(s));
+      parts.push(`border-radius:${s.borderRadius || 0}px;`);
+      parts.push('vertical-align:top;');
+      return parts.join('');
+    };
+
+    const makeRowTableStyle = (row) => {
+      const s = row?.settings || {};
+      const parts = [];
+      parts.push('border-collapse:collapse;');
+      parts.push(makeBackgroundStyle(s));
+      parts.push(makeBorderStyle(s));
+      parts.push(`border-radius:${s.borderRadius || 0}px;`);
+      return parts.join('');
+    };
+
     const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Email Preview</title>
-        <style>
-          body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-          }
-          .email-container {
-            max-width: 600px;
-            margin: 0 auto;
-            background-color: white;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            border-radius: 4px;
-            overflow: hidden;
-          }
-          .section {
-            padding: 20px;
-            border-bottom: 1px solid #eee;
-          }
-          .row {
-            display: flex;
-            flex-wrap: wrap;
-            margin: 0 -10px;
-          }
-          .column {
-            padding: 0 10px;
-            box-sizing: border-box;
-          }
-          .component {
-            margin-bottom: 15px;
-          }
-          img {
-            max-width: 100%;
-            height: auto;
-          }
-          a {
-            color: #0066cc;
-            text-decoration: none;
-          }
-          a:hover {
-            text-decoration: underline;
-          }
-          button {
-            background-color: #0066cc;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-          }
-          button:hover {
-            background-color: #0052a3;
-          }
-          ol, ul {
-            margin: 0 0 15px 0;
-            padding-left: 20px;
-          }
-          h1, h2, h3, h4, h5, h6 {
-            margin: 0 0 15px 0;
-          }
-          p {
-            margin: 0 0 15px 0;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="email-container">
-          ${sections
-            .map((section) =>
-              `<div class='section'>` +
-              (section.rows || [])
-                .map((row) =>
-                  `<div class='row'>` +
-                  (row.columns || [])
-                    .map((column) =>
-                      `<div class='column' style='flex: ${column.size / 12};'>` +
-                      (column.components || [])
-                        .map((component) => {
-                          // Apply component-specific styles
-                          const styles = component.settings ? `style="
-                            padding: ${component.settings.padding?.top || 0}px ${component.settings.padding?.right || 0}px ${component.settings.padding?.bottom || 0}px ${component.settings.padding?.left || 0}px;
-                            margin: ${component.settings.margin?.top || 0}px ${component.settings.margin?.right || 0}px ${component.settings.margin?.bottom || 0}px ${component.settings.margin?.left || 0}px;
-                            background-color: ${component.settings.backgroundColor || 'transparent'};
-                            text-align: ${component.settings.textAlign || 'left'};
-                            color: ${component.settings.textColor || '#000000'};
-                            font-size: ${component.settings.fontSize || '14px'};
-                            font-weight: ${component.settings.fontWeight || 'normal'};
-                            border: ${component.settings.border !== 'none' ? `${component.settings.borderWidth || 0}px ${component.settings.border || 'solid'} ${component.settings.borderColor || '#000000'}` : 'none'};
-                            border-radius: ${component.settings.borderRadius || 0}px;
-                          "` : '';
-                          
-                          // Escape HTML content to prevent injection
-                          const escapeHtml = (text) => {
-                            if (!text) return '';
-                            return text
-                              .replace(/&/g, '&amp;')
-                              .replace(/</g, '&lt;')
-                              .replace(/>/g, '&gt;')
-                              .replace(/"/g, '&quot;')
-                              .replace(/'/g, '&#039;');
-                          };
-                          
-                          switch (component.type) {
-                            case COMPONENT_TYPES.TEXT:
-                              return `<div class='component' ${styles}>${escapeHtml(component.content) || ''}</div>`;
-                            case COMPONENT_TYPES.HEADING:
-                            case COMPONENT_TYPES.HEADER_1:
-                              return `<h1 class='component' ${styles}>${escapeHtml(component.content) || ''}</h1>`;
-                            case COMPONENT_TYPES.HEADER_2:
-                              return `<h2 class='component' ${styles}>${escapeHtml(component.content) || ''}</h2>`;
-                            case COMPONENT_TYPES.HEADER_3:
-                              return `<h3 class='component' ${styles}>${escapeHtml(component.content) || ''}</h3>`;
-                            case COMPONENT_TYPES.PARAGRAPH:
-                              return `<p class='component' ${styles}>${escapeHtml(component.content) || ''}</p>`;
-                            case COMPONENT_TYPES.ORDERED_LIST:
-                              return `<ol class='component' ${styles}>${(component.content || '').split('\n').map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ol>`;
-                            case COMPONENT_TYPES.UNORDERED_LIST:
-                              return `<ul class='component' ${styles}>${(component.content || '').split('\n').map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`;
-                            case COMPONENT_TYPES.IMAGE:
-                              return `<div class='component' ${styles}><img src='${escapeHtml(component.imageUrl) || ''}' alt='Image' style='max-width: 100%; height: auto;' /></div>`;
-                            case COMPONENT_TYPES.LINK:
-                              return `<div class='component' ${styles}><a href='${escapeHtml(component.linkUrl) || '#'}'>${escapeHtml(component.content) || ''}</a></div>`;
-                            case COMPONENT_TYPES.BUTTON:
-                              return `<div class='component' ${styles}><button style="background-color: ${escapeHtml(component.settings?.buttonColor) || '#0066cc'}; color: ${escapeHtml(component.settings?.buttonTextColor) || '#ffffff'}; border: none; padding: 10px 20px; border-radius: 4px;">${escapeHtml(component.content) || 'Click Me'}</button></div>`;
-                            default:
-                              return `<div class='component' ${styles}>${escapeHtml(component.content) || ''}</div>`;
-                          }
-                        })
-                        .join('') +
-                      `</div>`
-                    )
-                    .join('') +
-                  `</div>`
-                )
-                .join('') +
-              `</div>`
-            )
-            .join('')}
-        </div>
-      </body>
+      <!doctype html>
+      <html xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+          <meta name="x-apple-disable-message-reformatting" />
+          <title>Email</title>
+          <!--[if mso]>
+            <xml>
+              <o:OfficeDocumentSettings>
+                <o:AllowPNG/>
+                <o:PixelsPerInch>96</o:PixelsPerInch>
+              </o:OfficeDocumentSettings>
+            </xml>
+          <![endif]-->
+          <style>
+            table, td { border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+            img { border: 0; outline: none; text-decoration: none; -ms-interpolation-mode: bicubic; }
+            a { text-decoration: none; }
+            @media only screen and (max-width: 620px) {
+              .container { width: 100% !important; }
+              .stack-column,
+              .stack-column-cell { display: block !important; width: 100% !important; max-width: 100% !important; }
+              .mobile-padding { padding-left: 16px !important; padding-right: 16px !important; }
+            }
+          </style>
+        </head>
+        <body style="margin:0;padding:0;background-color:${templateSettings.bodyBackgroundColor};">
+          <center style="width:100%;background-color:${templateSettings.bodyBackgroundColor};">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:${templateSettings.bodyBackgroundColor};">
+              <tr>
+                <td align="center" style="padding:20px;" class="mobile-padding">
+                  <!--[if mso]>
+                    <table role="presentation" width="${containerWidthPx}" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td>
+                  <![endif]-->
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" class="container" style="max-width:${containerWidthPx}px;background-color:${templateSettings.containerBackgroundColor};${templateSettings.containerPadding ? `padding:${templateSettings.containerPadding};` : ''}font-family:${templateSettings.fontFamily};font-size:${templateSettings.fontSize};font-weight:${templateSettings.fontWeight};line-height:${templateSettings.lineHeight};color:${templateSettings.textColor};">
+                    <tr>
+                      <td style="vertical-align:top;">
+                        ${sections
+                          .map((section) => {
+                            const rows = section.rows || [];
+                            return rows
+                              .map((row) => {
+                                const columns = row.columns || [];
+                                const rowTableStyle = makeRowTableStyle(row);
+                                const rowPadding = makePaddingStyle(row?.settings?.padding);
+                                const rowInner = `
+                                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="${rowTableStyle}">
+                                    <tr>
+                                      <td style="${rowPadding}vertical-align:top;">
+                                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                          <tr>
+                                            ${columns
+                                              .map((column) => {
+                                                const widthPct = Math.round(((column.size || 12) / 12) * 100);
+                                                const tdStyle = makeColumnTdStyle(column);
+                                                const content = (column.components || []).map((c) => renderComponent(c)).join('');
+                                                return `
+                                                  <td class="stack-column-cell" width="${widthPct}%" style="${tdStyle}">
+                                                    ${content}
+                                                  </td>
+                                                `;
+                                              })
+                                              .join('')}
+                                          </tr>
+                                        </table>
+                                      </td>
+                                    </tr>
+                                  </table>
+                                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                    <tr><td height="20" style="font-size:20px;line-height:20px;">&nbsp;</td></tr>
+                                  </table>
+                                `;
+                                return rowInner;
+                              })
+                              .join('');
+                          })
+                          .join('')}
+                      </td>
+                    </tr>
+                  </table>
+                  <!--[if mso]>
+                        </td>
+                      </tr>
+                    </table>
+                  <![endif]-->
+                </td>
+              </tr>
+            </table>
+          </center>
+        </body>
       </html>
     `;
 
     console.log('Generated HTML:', html); // Log generated HTML for debugging
     setHtmlContent(html);
-  }, [sections]);
+  }, [sections, templateSettings]);
 
   useEffect(() => {
     setSelectedTarget((prev) => locateTarget(sections, prev));
@@ -366,10 +473,33 @@ const CreateTemplate = () => {
     console.log("Generated HTML Content:", htmlContent);
   }, [htmlContent]);
 
-  // Define handleSaveTemplate to log the current sections
+  // Define handleSaveTemplate to save template state to localStorage and download the generated HTML as an .html file
   const handleSaveTemplate = () => {
-    console.log('Saved Template:', sections);
-  }
+    try {
+      const payload = {
+        sections,
+        templateSettings,
+        savedAt: new Date().toISOString(),
+      };
+      window.localStorage.setItem('byet.emailTemplate', JSON.stringify(payload));
+    } catch (e) {
+      console.error('Failed to save template to localStorage:', e);
+    }
+
+    try {
+      const blob = new Blob([htmlContent || ''], { type: 'text/html;charset=utf-8' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `email-template-${Date.now()}.html`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Failed to download HTML:', e);
+    }
+  };
 
   const handleTargetUpdate = (updatedTarget) => {
     if (!updatedTarget) return;
@@ -435,10 +565,10 @@ const CreateTemplate = () => {
   return (
     <DndProvider backend={HTML5Backend}>
       <Box display="flex" flexDirection="column" h="100vh">
-        <Box flex="1" display="flex">
+        <Box flex="1" display="flex" overflow="hidden">
           {/* Left: Email Preview Area */}
           {isEditorView ? (
-            <Box flex="3" p={4} bg="gray.50"> {/* Increased flex value to make the email preview area wider */}
+            <Box flex="3" p={4} bg="gray.50" overflowY="auto"> {/* Increased flex value to make the email preview area wider */}
               <Heading size="lg" mb={4}>
                 Editor View
               </Heading>
@@ -461,7 +591,7 @@ const CreateTemplate = () => {
               />
             </Box>
           ) : isBrowserView ? (
-            <Box flex="3" p={4} bg="gray.200" borderLeftWidth="1px">
+            <Box flex="3" p={4} bg="gray.200" borderLeftWidth="1px" overflow="hidden">
               <Heading size="lg" mb={4}>
                 Browser View
               </Heading>
@@ -477,7 +607,7 @@ const CreateTemplate = () => {
               </Box>
             </Box>
           ) : (
-            <Box flex="3" p={4} bg="gray.200" borderLeftWidth="1px">
+            <Box flex="3" p={4} bg="gray.200" borderLeftWidth="1px" overflowY="auto">
               <Heading size="lg" mb={4}>
                 Code Preview
               </Heading>
@@ -496,10 +626,12 @@ const CreateTemplate = () => {
           )}
 
           {/* Right: Editor Tabs */}
-          <Box w="20%" p={0} bg="white" borderLeftWidth="1px" minHeight="400px" boxShadow="md">
+          <Box w="20%" p={0} bg="white" borderLeftWidth="1px" minHeight="400px" boxShadow="md" h="100%" overflow="hidden" flexShrink={0}>
             <EditorTabs 
               selectedTarget={selectedTarget}
               onTargetUpdate={handleTargetUpdate}
+              templateSettings={templateSettings}
+              onTemplateSettingsChange={setTemplateSettings}
             />
           </Box>
         </Box>

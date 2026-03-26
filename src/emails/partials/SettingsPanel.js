@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Text, Input, Select, Slider, SliderTrack, SliderFilledTrack, SliderThumb, Divider, Button } from '@chakra-ui/react';
+import { Box, Text, Input, Select, Slider, SliderTrack, SliderFilledTrack, SliderThumb, Divider, Button, Accordion, AccordionItem, AccordionButton, AccordionPanel, AccordionIcon } from '@chakra-ui/react';
 
-const SettingsPanel = ({ selectedTarget, onUpdateTarget }) => {
+const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTemplateSettingsChange }) => {
   const [settings, setSettings] = useState({
     // Padding and margin
     padding: { top: 0, right: 0, bottom: 0, left: 0 },
@@ -43,6 +43,9 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget }) => {
     // Button specific
     buttonColor: '#0066cc',
     buttonTextColor: '#ffffff',
+
+    // List specific
+    listStyleType: 'disc',
   });
 
   // Update settings when selected component changes
@@ -73,6 +76,7 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget }) => {
         linkColor: '#0066cc',
         buttonColor: '#0066cc',
         buttonTextColor: '#ffffff',
+        listStyleType: 'disc',
         // Then override with target settings
         ...selectedTarget.data.settings
       });
@@ -102,29 +106,197 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget }) => {
     handleSettingChange('margin', newMargin);
   };
 
-  if (!selectedTarget) {
-    return (
-      <Box w="100%" h="100%" p={4} display="flex" alignItems="center" justifyContent="center">
-        <Text textAlign="center" color="gray.500">
-          Select a row, column, or component to edit its settings
-        </Text>
-      </Box>
-    );
-  }
+  const toTitleCase = (value) => {
+    if (!value) return value;
+    return `${value}`.charAt(0).toUpperCase() + `${value}`.slice(1);
+  };
 
-  const targetLabel = selectedTarget.kind === 'component'
-    ? selectedTarget.data?.type
-    : selectedTarget.kind;
+  const targetLabel = selectedTarget
+    ? (selectedTarget.kind === 'component' ? selectedTarget.data?.type : toTitleCase(selectedTarget.kind))
+    : null;
+
+  const isComponent = selectedTarget?.kind === 'component';
+  const componentType = selectedTarget?.data?.type;
+  const isRowOrColumn = selectedTarget?.kind === 'row' || selectedTarget?.kind === 'column';
+
+  const componentTypesWithBoxStyles = [
+    'Text',
+    'Paragraph',
+    'Heading',
+    'Header1',
+    'Header2',
+    'Header3',
+    'Img',
+    'Link',
+    'Button',
+    'OrderedList',
+    'UnorderedList',
+  ];
+
+  const componentTypesWithTextStyles = [
+    'Text',
+    'Paragraph',
+    'Heading',
+    'Header1',
+    'Header2',
+    'Header3',
+    'Link',
+    'Button',
+    'OrderedList',
+    'UnorderedList',
+  ];
+
+  const showPadding = isRowOrColumn || (!isComponent ? true : componentTypesWithBoxStyles.includes(componentType));
+  const showMargin = isRowOrColumn || (!isComponent ? true : componentTypesWithBoxStyles.includes(componentType));
+  const showText = isRowOrColumn || (!isComponent ? true : componentTypesWithTextStyles.includes(componentType));
+  const showBackground = isRowOrColumn || (!isComponent ? true : componentTypesWithBoxStyles.includes(componentType));
+  const showDimensions = isRowOrColumn || (!isComponent ? true : componentType === 'Img');
+  const showBorder = isRowOrColumn || (!isComponent ? true : componentTypesWithBoxStyles.includes(componentType));
+  const showTypographyAdvanced = isRowOrColumn || (!isComponent ? true : componentTypesWithTextStyles.includes(componentType));
+  const showLayout = isRowOrColumn || (!isComponent ? true : componentTypesWithBoxStyles.includes(componentType));
+  const showListStyle = isComponent && (componentType === 'OrderedList' || componentType === 'UnorderedList');
 
   return (
     <Box w="100%" h="100%" p={4} overflowY="auto">
-      <Text fontSize="lg" fontWeight="bold" mb={4}>
-        {targetLabel} Settings
-      </Text>
-      
-      <Divider mb={4} />
+      <Accordion allowMultiple defaultIndex={[1]}>
+        <AccordionItem>
+          <AccordionButton px={0}>
+            <Box flex="1" textAlign="left">
+              <Text fontSize="lg" fontWeight="bold">Template global style</Text>
+            </Box>
+            <AccordionIcon />
+          </AccordionButton>
+          <AccordionPanel px={0} pt={4}>
+            <Text fontSize="md" fontWeight="semibold" mb={2}>Typography</Text>
+            <Box mb={3}>
+              <Text fontSize="xs" mb={1}>Font Family</Text>
+              <Input
+                value={templateSettings?.fontFamily || ''}
+                onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, fontFamily: e.target.value })}
+                size="sm"
+                placeholder="Arial, sans-serif"
+              />
+            </Box>
+
+            <Box mb={3}>
+              <Text fontSize="xs" mb={1}>Font Size</Text>
+              <Input
+                value={templateSettings?.fontSize || ''}
+                onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, fontSize: e.target.value })}
+                size="sm"
+                placeholder="14px"
+              />
+            </Box>
+
+            <Box mb={3}>
+              <Text fontSize="xs" mb={1}>Font Weight</Text>
+              <Select
+                value={templateSettings?.fontWeight || 'normal'}
+                onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, fontWeight: e.target.value })}
+                size="sm"
+              >
+                <option value="normal">Normal</option>
+                <option value="bold">Bold</option>
+                <option value="lighter">Lighter</option>
+                <option value="bolder">Bolder</option>
+              </Select>
+            </Box>
+
+            <Box mb={3}>
+              <Text fontSize="xs" mb={1}>Line Height</Text>
+              <Input
+                value={templateSettings?.lineHeight || ''}
+                onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, lineHeight: e.target.value })}
+                size="sm"
+                placeholder="1.5"
+              />
+            </Box>
+
+            <Box mb={3}>
+              <Text fontSize="xs" mb={1}>Text Color</Text>
+              <Input
+                type="color"
+                value={templateSettings?.textColor || '#000000'}
+                onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, textColor: e.target.value })}
+                size="sm"
+              />
+            </Box>
+
+            <Divider my={4} />
+
+            <Text fontSize="md" fontWeight="semibold" mb={2}>Template</Text>
+            <Box mb={3}>
+              <Text fontSize="xs" mb={1}>Body Background Color</Text>
+              <Input
+                type="color"
+                value={templateSettings?.bodyBackgroundColor || '#f5f5f5'}
+                onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, bodyBackgroundColor: e.target.value })}
+                size="sm"
+              />
+            </Box>
+
+            <Box mb={3}>
+              <Text fontSize="xs" mb={1}>Container Background Color</Text>
+              <Input
+                type="color"
+                value={templateSettings?.containerBackgroundColor || '#ffffff'}
+                onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, containerBackgroundColor: e.target.value })}
+                size="sm"
+              />
+            </Box>
+
+            <Box mb={3}>
+              <Text fontSize="xs" mb={1}>Template Width</Text>
+              <Input
+                value={templateSettings?.containerWidth || ''}
+                onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, containerWidth: e.target.value })}
+                size="sm"
+                placeholder="600px"
+              />
+            </Box>
+
+            <Box mb={3}>
+              <Text fontSize="xs" mb={1}>Template Min Height</Text>
+              <Input
+                value={templateSettings?.containerMinHeight || ''}
+                onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, containerMinHeight: e.target.value })}
+                size="sm"
+                placeholder="auto / 400px"
+              />
+            </Box>
+
+            <Box mb={3}>
+              <Text fontSize="xs" mb={1}>Container Padding</Text>
+              <Input
+                value={templateSettings?.containerPadding || ''}
+                onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, containerPadding: e.target.value })}
+                size="sm"
+                placeholder="20px"
+              />
+            </Box>
+          </AccordionPanel>
+        </AccordionItem>
+
+        <AccordionItem>
+          <AccordionButton px={0}>
+            <Box flex="1" textAlign="left">
+              <Text fontSize="lg" fontWeight="bold">
+                {targetLabel ? `${targetLabel} Settings` : 'Element Settings'}
+              </Text>
+            </Box>
+            <AccordionIcon />
+          </AccordionButton>
+          <AccordionPanel px={0} pt={4}>
+            {!selectedTarget ? (
+              <Text textAlign="center" color="gray.500">
+                Select a row, column, or component to edit its settings
+              </Text>
+            ) : (
+              <>
       
       {/* Padding Settings */}
+      {showPadding && (
+      <>
       <Text fontSize="md" fontWeight="semibold" mb={2}>Padding</Text>
       <Box display="flex" justifyContent="space-between" mb={3}>
         <Box>
@@ -170,8 +342,12 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget }) => {
       </Box>
       
       <Divider my={4} />
+      </>
+      )}
       
       {/* Margin Settings */}
+      {showMargin && (
+      <>
       <Text fontSize="md" fontWeight="semibold" mb={2}>Margin</Text>
       <Box display="flex" justifyContent="space-between" mb={3}>
         <Box>
@@ -217,8 +393,12 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget }) => {
       </Box>
       
       <Divider my={4} />
+      </>
+      )}
       
       {/* Text Settings */}
+      {showText && (
+      <>
       <Text fontSize="md" fontWeight="semibold" mb={2}>Text</Text>
       <Box mb={3}>
         <Text fontSize="xs" mb={1}>Font Size</Text>
@@ -276,8 +456,36 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget }) => {
       </Box>
       
       <Divider my={4} />
+      </>
+      )}
+
+      {showListStyle && (
+      <>
+      <Text fontSize="md" fontWeight="semibold" mb={2}>List</Text>
+      <Box mb={3}>
+        <Text fontSize="xs" mb={1}>List Style Type</Text>
+        <Select
+          value={settings.listStyleType}
+          onChange={(e) => handleSettingChange('listStyleType', e.target.value)}
+          size="sm"
+        >
+          <option value="disc">Disc</option>
+          <option value="circle">Circle</option>
+          <option value="square">Square</option>
+          <option value="decimal">Decimal</option>
+          <option value="lower-alpha">Lower Alpha</option>
+          <option value="upper-alpha">Upper Alpha</option>
+          <option value="lower-roman">Lower Roman</option>
+          <option value="upper-roman">Upper Roman</option>
+        </Select>
+      </Box>
+      <Divider my={4} />
+      </>
+      )}
       
       {/* Background Settings */}
+      {showBackground && (
+      <>
       <Text fontSize="md" fontWeight="semibold" mb={2}>Background</Text>
       <Box mb={3}>
         <Text fontSize="xs" mb={1}>Background Color</Text>
@@ -342,8 +550,12 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget }) => {
       </Box>
       
       <Divider my={4} />
+      </>
+      )}
       
       {/* Dimensions */}
+      {showDimensions && (
+      <>
       <Text fontSize="md" fontWeight="semibold" mb={2}>Dimensions</Text>
       <Box mb={3}>
         <Text fontSize="xs" mb={1}>Width</Text>
@@ -364,8 +576,12 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget }) => {
       </Box>
       
       <Divider my={4} />
+      </>
+      )}
       
       {/* Border Settings */}
+      {showBorder && (
+      <>
       <Text fontSize="md" fontWeight="semibold" mb={2}>Border</Text>
       <Box mb={3}>
         <Text fontSize="xs" mb={1}>Border Style</Text>
@@ -425,8 +641,12 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget }) => {
       </Box>
       
       <Divider my={4} />
+      </>
+      )}
       
       {/* Typography */}
+      {showTypographyAdvanced && (
+      <>
       <Text fontSize="md" fontWeight="semibold" mb={2}>Typography</Text>
       <Box mb={3}>
         <Text fontSize="xs" mb={1}>Letter Spacing</Text>
@@ -449,8 +669,12 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget }) => {
       </Box>
 
       <Divider my={4} />
+      </>
+      )}
 
       {/* Layout */}
+      {showLayout && (
+      <>
       <Text fontSize="md" fontWeight="semibold" mb={2}>Layout</Text>
       <Box mb={3}>
         <Text fontSize="xs" mb={1}>Box Sizing</Text>
@@ -465,6 +689,8 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget }) => {
       </Box>
 
       <Divider my={4} />
+      </>
+      )}
 
       {/* Component Specific Settings */}
       {selectedTarget.kind === 'component' && selectedTarget.data?.type === 'Button' && (
@@ -536,6 +762,7 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget }) => {
             linkColor: '#0066cc',
             buttonColor: '#0066cc',
             buttonTextColor: '#ffffff',
+            listStyleType: 'disc',
           };
           setSettings(defaultSettings);
           
@@ -550,6 +777,11 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget }) => {
       >
         Reset to Default
       </Button>
+              </>
+            )}
+          </AccordionPanel>
+        </AccordionItem>
+      </Accordion>
     </Box>
   );
 };
