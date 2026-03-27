@@ -40,7 +40,7 @@ const DraggableComponentInColumn = ({ component, index, columnId, parentId, rowI
         border: isSelected ? '2px solid blue' : '1px solid #ddd',
         margin: '4px 0',
         padding: '8px',
-        backgroundColor: '#fff',
+        backgroundColor: 'transparent',
         cursor: 'grab',
         boxShadow: isSelected ? '0 0 0 2px rgba(0, 123, 255, 0.25)' : 'none',
       }}

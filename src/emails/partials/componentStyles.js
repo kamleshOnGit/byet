@@ -31,7 +31,7 @@ export const columnParentStyle = (colSpan) => ({
   margin: '4px',
   padding: '8px',
   minHeight: '50px',
-  backgroundColor: '#fefefe',
+  backgroundColor: 'transparent',
   boxSizing: 'border-box',
   overflow: 'hidden',
 });

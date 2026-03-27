@@ -3,6 +3,7 @@ import { Box, Button, Heading, IconButton } from '@chakra-ui/react';
 import { AddIcon, EditIcon, SettingsIcon, ViewIcon } from '@chakra-ui/icons';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
+import { useLocation } from 'react-router-dom';
 import EditorTabs from './EditorTabs';
 import DroppableSection from './DroppableSection';
 import { COMPONENT_TYPES } from './componentTypes';
@@ -138,6 +139,7 @@ const getInitialComponentTarget = (sections) => {
 
 // Main CreateTemplate Component
 const CreateTemplate = () => {
+  const location = useLocation();
   const [sections, setSections] = useState(initialSections());
   const [selectedTarget, setSelectedTarget] = useState(() => getInitialComponentTarget(sections));
 
@@ -159,6 +161,16 @@ const CreateTemplate = () => {
   // Add state for HTML content and browser view toggle
   const [htmlContent, setHtmlContent] = useState('<div>Write your HTML here</div>');
   const [isBrowserView, setIsBrowserView] = useState(false);
+
+  useEffect(() => {
+    const importedSections = location?.state?.importedSections;
+    if (!importedSections) return;
+
+    setSections(importedSections);
+    setSelectedTarget(getInitialComponentTarget(importedSections));
+    setIsEditorView(true);
+    setIsBrowserView(false);
+  }, [location?.state?.importedSections]);
 
   // Ensure updateSections is defined in the correct scope
   const updateSections = (updater) => {
@@ -309,6 +321,30 @@ const CreateTemplate = () => {
               </tr>
             </table>`
           );
+        }
+        case COMPONENT_TYPES.SOCIAL_LINK:
+          return wrap(
+            `<a href="${escapeHtml(component.linkUrl) || '#'}" target="_blank" style="color:${s.linkColor || '#0066cc'};text-decoration:underline;">${escapeHtml(component.content) || 'Social Link'}</a>`
+          );
+        case COMPONENT_TYPES.SOCIAL_ICONS: {
+          const urls = (component.socialUrls || '').split('\n').filter(Boolean);
+          const icons = urls.map((url) => `<a href="${escapeHtml(url)}" target="_blank" style="display:inline-block;margin:0 4px;"><img src="https://dummyimage.com/32x32/cccccc/000000.png&text=S" alt="social" width="32" height="32" style="border:0;outline:none;" /></a>`).join('');
+          return wrap(`<div style="text-align:center;">${icons || '<span>Social Icons</span>'}</div>`);
+        }
+        case COMPONENT_TYPES.HR:
+          return wrap(`<hr style="border:0;border-top:1px solid ${s.borderColor || '#cccccc'};margin:0;" />`);
+        case COMPONENT_TYPES.VIDEO:
+          return wrap(`<a href="${escapeHtml(component.videoUrl) || '#'}" target="_blank"><img src="https://dummyimage.com/600x338/000000/ffffff.png&text=Video" alt="Video" width="100%" style="display:block;max-width:100%;height:auto;" /></a>`);
+        case COMPONENT_TYPES.SPACE:
+          return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td height="${component.height || 20}" style="font-size:${component.height || 20}px;line-height:${component.height || 20}px;">&nbsp;</td></tr></table>`;
+        case COMPONENT_TYPES.ICON:
+          return wrap(`<div style="text-align:center;font-size:24px;">${escapeHtml(component.iconName) || '★'}</div>`);
+        case COMPONENT_TYPES.HTML:
+          return wrap(component.htmlContent || '');
+        case COMPONENT_TYPES.MENU: {
+          const items = (component.menuItems || component.content || '').split('\n').filter(Boolean);
+          const links = items.map((item) => `<a href="#" style="color:${s.textColor || '#333333'};text-decoration:none;padding:0 8px;">${escapeHtml(item)}</a>`).join(' | ');
+          return wrap(`<div style="text-align:center;">${links}</div>`);
         }
         default:
           return wrap(`<div style="margin:0;">${escapeHtml(component.content) || ''}</div>`);

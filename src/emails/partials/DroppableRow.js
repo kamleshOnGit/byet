@@ -84,12 +84,33 @@ const DroppableRow = ({ row, setComponents, parentId, index, moveRow, updateSect
     }
   };
 
+  // Merge row.settings into editor display
+  const rowSettingsStyle = (() => {
+    const s = row?.settings || {};
+    const out = {};
+    const isWhiteBg = (c) => !c || c === '#ffffff' || c === '#fff' || c === 'rgb(255, 255, 255)' || c === 'rgba(255, 255, 255, 1)' || c === 'transparent';
+    if (s.backgroundColor && !isWhiteBg(s.backgroundColor)) {
+      out.backgroundColor = s.backgroundColor;
+    }
+    if (s.padding && typeof s.padding === 'object') {
+      const { top = 0, right = 0, bottom = 0, left = 0 } = s.padding;
+      if (top || right || bottom || left) {
+        out.padding = `${Math.max(top, 30)}px ${Math.max(right, 10)}px ${Math.max(bottom, 10)}px ${Math.max(left, 10)}px`;
+      }
+    }
+    if (s.borderRadius) {
+      out.borderRadius = `${s.borderRadius}px`;
+    }
+    return out;
+  })();
+
   return (
     <Box
       ref={(node) => drag(drop(node))}
       onClick={handleSelectRow}
       style={{
         ...rowStyle,
+        ...rowSettingsStyle,
         border: isSelected ? '2px solid #3182ce' : rowStyle.border,
       }}
     >

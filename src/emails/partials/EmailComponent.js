@@ -42,7 +42,46 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
 
   // Apply styles from component settings
   const applyComponentStyles = () => {
-    return {};
+    const s = component?.settings || {};
+    const styles = {};
+
+    // Background
+    const isWhiteBg = (c) => !c || c === '#ffffff' || c === '#fff' || c === 'rgb(255, 255, 255)' || c === 'rgba(255, 255, 255, 1)' || c === 'transparent';
+    if (s.backgroundColor && !isWhiteBg(s.backgroundColor)) {
+      styles.backgroundColor = s.backgroundColor;
+    }
+    if (s.backgroundImage) {
+      styles.backgroundImage = `url('${s.backgroundImage}')`;
+      styles.backgroundSize = s.backgroundSize || 'cover';
+      styles.backgroundPosition = s.backgroundPosition || 'center';
+      styles.backgroundRepeat = s.backgroundRepeat || 'no-repeat';
+    }
+
+    // Padding
+    if (s.padding && typeof s.padding === 'object') {
+      const { top = 0, right = 0, bottom = 0, left = 0 } = s.padding;
+      if (top || right || bottom || left) {
+        styles.padding = `${top}px ${right}px ${bottom}px ${left}px`;
+      }
+    }
+
+    // Margin
+    if (s.margin && typeof s.margin === 'object') {
+      const { top = 0, right = 0, bottom = 0, left = 0 } = s.margin;
+      if (top || right || bottom || left) {
+        styles.margin = `${top}px ${right}px ${bottom}px ${left}px`;
+      }
+    }
+
+    // Border
+    if (s.border && s.border !== 'none' && s.borderWidth) {
+      styles.border = `${s.borderWidth}px ${s.border} ${s.borderColor || '#000'}`;
+    }
+    if (s.borderRadius) {
+      styles.borderRadius = `${s.borderRadius}px`;
+    }
+
+    return styles;
   };
   
   const renderContent = () => {
@@ -335,6 +374,38 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
               value={component.menuItems || 'Home\nAbout\nServices\nContact'}
               onChange={(e) => handleChange({ ...component, menuItems: e.target.value })}
               style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px', minHeight: '80px' }}
+            />
+          </Box>
+        );
+      case COMPONENT_TYPES.SOCIAL_LINK:
+        return (
+          <Box onClick={handleSelect} p={3} border="1px dashed" borderColor="blue.300" borderRadius="md" style={componentStyles}>
+            <Text color="blue.500" fontWeight="bold" fontSize="sm">@ Social Link</Text>
+            <input
+              type="text"
+              placeholder="Social profile URL"
+              value={component.linkUrl || 'https://facebook.com'}
+              onChange={(e) => handleChange({ ...component, linkUrl: e.target.value })}
+              style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px' }}
+            />
+            <input
+              type="text"
+              placeholder="Label"
+              value={content || 'Facebook'}
+              onChange={handleChange}
+              style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px' }}
+            />
+          </Box>
+        );
+      case COMPONENT_TYPES.SOCIAL_ICONS:
+        return (
+          <Box onClick={handleSelect} p={3} border="1px dashed" borderColor="blue.200" borderRadius="md" style={componentStyles} display="flex" flexWrap="wrap" gap="8px" justifyContent="center">
+            <Text w="100%" color="blue.500" fontWeight="bold" fontSize="sm" textAlign="center">Social Icons</Text>
+            <textarea
+              placeholder="Social URLs (one per line)"
+              value={component.socialUrls || 'https://facebook.com\nhttps://twitter.com\nhttps://instagram.com'}
+              onChange={(e) => handleChange({ ...component, socialUrls: e.target.value })}
+              style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px', minHeight: '60px' }}
             />
           </Box>
         );

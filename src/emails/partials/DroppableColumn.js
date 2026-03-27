@@ -22,14 +22,28 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, updateSections, syn
               return 'Default Heading';
             case COMPONENT_TYPES.PARAGRAPH:
               return 'Default Paragraph';
+            case COMPONENT_TYPES.HEADER_1:
+              return 'Header 1';
+            case COMPONENT_TYPES.HEADER_2:
+              return 'Header 2';
+            case COMPONENT_TYPES.HEADER_3:
+              return 'Header 3';
             case COMPONENT_TYPES.ORDERED_LIST:
               return '1. Item 1\n2. Item 2';
             case COMPONENT_TYPES.UNORDERED_LIST:
               return '- Item 1\n- Item 2';
+            case COMPONENT_TYPES.BUTTON:
+              return 'Click Me';
             case COMPONENT_TYPES.LINK:
               return 'Default Link';
             case COMPONENT_TYPES.IMAGE:
               return 'Default Image';
+            case COMPONENT_TYPES.SOCIAL_LINK:
+              return 'Facebook';
+            case COMPONENT_TYPES.SOCIAL_ICONS:
+              return '';
+            case COMPONENT_TYPES.HR:
+              return '';
             case COMPONENT_TYPES.VIDEO:
               return 'Default Video';
             case COMPONENT_TYPES.TABLE:
@@ -47,7 +61,8 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, updateSections, syn
           }
         })(),
         imageUrl: item.type === COMPONENT_TYPES.IMAGE ? 'https://dummyimage.com/100x50/cccccc/000000.png' : '',
-        linkUrl: item.type === COMPONENT_TYPES.LINK ? 'https://example.com' : '',
+        linkUrl: [COMPONENT_TYPES.LINK, COMPONENT_TYPES.BUTTON, COMPONENT_TYPES.SOCIAL_LINK].includes(item.type) ? 'https://example.com' : '',
+        socialUrls: item.type === COMPONENT_TYPES.SOCIAL_ICONS ? 'https://facebook.com\nhttps://twitter.com\nhttps://instagram.com' : '',
         font: { size: 'md', weight: 'normal', family: 'Arial' },
         videoUrl: item.type === COMPONENT_TYPES.VIDEO ? 'https://example.com/video.mp4' : '',
         tableData: item.type === COMPONENT_TYPES.TABLE ? 'Header 1,Header 2,Header 3\nRow 1 Col 1,Row 1 Col 2,Row 1 Col 3\nRow 2 Col 1,Row 2 Col 2,Row 2 Col 3' : '',
@@ -119,12 +134,42 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, updateSections, syn
     }
   };
   
+  // Merge column.settings into editor display
+  const colSettingsStyle = (() => {
+    const s = column?.settings || {};
+    const out = {};
+    const isWhiteBg = (c) => !c || c === '#ffffff' || c === '#fff' || c === 'rgb(255, 255, 255)' || c === 'rgba(255, 255, 255, 1)' || c === 'transparent';
+    if (s.backgroundColor && !isWhiteBg(s.backgroundColor)) {
+      out.backgroundColor = s.backgroundColor;
+    }
+    if (s.backgroundImage) {
+      out.backgroundImage = `url('${s.backgroundImage}')`;
+      out.backgroundSize = s.backgroundSize || 'cover';
+      out.backgroundPosition = s.backgroundPosition || 'center';
+      out.backgroundRepeat = s.backgroundRepeat || 'no-repeat';
+    }
+    if (s.padding && typeof s.padding === 'object') {
+      const { top = 0, right = 0, bottom = 0, left = 0 } = s.padding;
+      if (top || right || bottom || left) {
+        out.padding = `${top}px ${right}px ${bottom}px ${left}px`;
+      }
+    }
+    if (s.borderRadius) {
+      out.borderRadius = `${s.borderRadius}px`;
+    }
+    if (s.textAlign) {
+      out.textAlign = s.textAlign;
+    }
+    return out;
+  })();
+
   return (
     <Box
       ref={drop}
       onClick={handleSelectColumn}
       style={{
         ...columnParentStyle(colSpan),
+        ...colSettingsStyle,
         border: isSelected ? '2px solid #3182ce' : columnParentStyle(colSpan).border,
         borderRadius: '6px',
         display: 'flex',
