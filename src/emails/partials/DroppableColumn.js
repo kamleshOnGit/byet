@@ -138,8 +138,8 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, updateSections, syn
   const colSettingsStyle = (() => {
     const s = column?.settings || {};
     const out = {};
-    const isWhiteBg = (c) => !c || c === '#ffffff' || c === '#fff' || c === 'rgb(255, 255, 255)' || c === 'rgba(255, 255, 255, 1)' || c === 'transparent';
-    if (s.backgroundColor && !isWhiteBg(s.backgroundColor)) {
+    // Always apply background color
+    if (s.backgroundColor && s.backgroundColor !== 'transparent') {
       out.backgroundColor = s.backgroundColor;
     }
     if (s.backgroundImage) {

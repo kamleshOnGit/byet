@@ -402,19 +402,12 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
       <Text fontSize="md" fontWeight="semibold" mb={2}>Text</Text>
       <Box mb={3}>
         <Text fontSize="xs" mb={1}>Font Size</Text>
-        <Select 
-          value={settings.fontSize} 
+        <Input
+          value={settings.fontSize}
           onChange={(e) => handleSettingChange('fontSize', e.target.value)}
           size="sm"
-        >
-          <option value="xs">Extra Small</option>
-          <option value="sm">Small</option>
-          <option value="md">Medium</option>
-          <option value="lg">Large</option>
-          <option value="xl">Extra Large</option>
-          <option value="2xl">2X Large</option>
-          <option value="3xl">3X Large</option>
-        </Select>
+          placeholder="14px, 16px, 1.2em..."
+        />
       </Box>
       
       <Box mb={3}>

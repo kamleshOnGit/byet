@@ -107,9 +107,13 @@ const extractBorderStyles = (styleText) => {
 };
 
 const extractBackgroundImage = (styleText) => {
-  const bgImg = extractStyleValue(styleText, 'background-image');
+  let bgImg = extractStyleValue(styleText, 'background-image');
+  if (!bgImg) {
+    const bgShorthand = extractStyleValue(styleText, 'background');
+    if (bgShorthand) bgImg = bgShorthand;
+  }
   if (!bgImg) return '';
-  const urlMatch = bgImg.match(/url\(['"]?([^'"]+)['"]?\)/i);
+  const urlMatch = bgImg.match(/url\(\s*['"]?([^'"()]+)['"]?\s*\)/i);
   return urlMatch ? urlMatch[1] : '';
 };
 
@@ -183,9 +187,14 @@ const getTableScore = (tableEl) => {
   const name = `${tableEl.getAttribute?.('name') || ''}`.toLowerCase();
   const width = (tableEl.getAttribute?.('width') || extractStyleValue(tableEl.getAttribute?.('style') || '', 'width') || '').toLowerCase();
   let bonus = 0;
+  if (name === 'bmemainbody') bonus += 20000;
+  if (name === 'bmemaincolumnparenttable') bonus += 18000;
+  if (name === 'bmemaincolumn') bonus += 16000;
+  if (name === 'bmemaincontent') bonus += 12000;
   if (name.includes('bmemaincolumn') || name.includes('bmemaincontent') || name.includes('maincontent')) bonus += 5000;
+  if (name.includes('mainbody') || name.includes('maincolumnparent')) bonus += 4000;
   if (`${width}`.includes('600')) bonus += 2000;
-  if (width === '100%') bonus -= 1500;
+  if (width === '100%') bonus += 500;
   return bonus + directRowCount * 200 + directCellCount * 20;
 };
 
@@ -281,6 +290,24 @@ const extractComponentsFromElement = (node, components = []) => {
   // Skip noise/divider tables
   if (tag === 'table') {
     if (isNoiseTable(el) || isDividerTable(el)) return;
+  }
+
+  const directLinkChildren = Array.from(el.children || []).filter((child) => `${child.tagName || ''}`.toLowerCase() === 'a');
+  const directNonLinkChildren = Array.from(el.children || []).filter((child) => `${child.tagName || ''}`.toLowerCase() !== 'a' && `${child.tagName || ''}`.toLowerCase() !== 'br');
+  if (tag !== 'a' && directLinkChildren.length >= 2 && directNonLinkChildren.length === 0) {
+    const items = directLinkChildren
+      .map((link) => `${link.textContent || ''}`.replace(/\s+/g, ' ').trim())
+      .filter((text) => text && !isDecorativeSeparator(text));
+    if (items.length >= 2) {
+      components.push({
+        id: makeId(),
+        type: COMPONENT_TYPES.MENU,
+        content: items.join('\n'),
+        menuItems: items.join('\n'),
+        settings: createComponentSettings(el),
+      });
+      return;
+    }
   }
 
   // Headers
@@ -499,14 +526,32 @@ const createColumnFromCell = (td, index, size, rowIndex, now) => {
     id: now + rowIndex * 1000 + index + 2,
     label: `Column ${index + 1}`,
     size,
-    settings: { padding, margin, backgroundColor: bg || '#ffffff', backgroundImage: bgImage, ...borderStyles, ...dims },
+    settings: { ...defaultColSettings(), padding, margin, backgroundColor: bg || 'transparent', backgroundImage: bgImage, ...borderStyles, ...dims },
     components: deduped,
   };
 };
 
 // Compute column sizes from cells, always ensuring total = 12
 const computeColumnSizes = (cells) => {
-  const rawSizes = cells.map((c) => {
+  const meaningfulCells = cells.filter((c) => {
+    const text = `${c.textContent || ''}`.trim();
+    const hasImg = c.querySelector?.('img');
+    const wAttr = c.getAttribute?.('width') || '';
+    const wStyle = extractStyleValue(c.getAttribute?.('style') || '', 'width');
+    const raw = `${wAttr || wStyle || ''}`.trim();
+    const hasContent = (text.length > 0 && !isDecorativeSeparator(text)) || hasImg;
+    if (!hasContent) return false;
+    if (!raw) return true;
+    if (raw.endsWith('%')) {
+      const pct = Number.parseFloat(raw.replace('%', ''));
+      return !Number.isFinite(pct) || pct >= 12;
+    }
+    const px = Number.parseFloat(raw.replace(/px|pt/gi, ''));
+    return !Number.isFinite(px) || px >= 50;
+  });
+  const activeCells = meaningfulCells.length >= 2 ? meaningfulCells : cells;
+
+  const rawSizes = activeCells.map((c) => {
     const wAttr = c.getAttribute?.('width') || '';
     const wStyle = extractStyleValue(c.getAttribute?.('style') || '', 'width');
     const raw = wAttr || wStyle;
@@ -521,13 +566,13 @@ const computeColumnSizes = (cells) => {
   if (hasPx) {
     const totalPx = rawSizes.reduce((s, v) => s + (typeof v === 'number' && v > 12 ? v : 0), 0);
     if (totalPx > 0) {
-      const pxSizes = rawSizes.map((v) => typeof v === 'number' && v > 12 ? Math.max(1, Math.round((v / totalPx) * 12)) : Math.max(1, Math.round(12 / cells.length)));
+      const pxSizes = rawSizes.map((v) => typeof v === 'number' && v > 12 ? Math.max(1, Math.round((v / totalPx) * 12)) : Math.max(1, Math.round(12 / activeCells.length)));
       return normalizeColumnSizes(pxSizes);
     }
   }
 
   // Use fraction-based or equal distribution
-  const sizes = rawSizes.map((v) => (typeof v === 'number' && v >= 1 && v <= 12) ? v : Math.max(1, Math.round(12 / cells.length)));
+  const sizes = rawSizes.map((v) => (typeof v === 'number' && v >= 1 && v <= 12) ? v : Math.max(1, Math.round(12 / activeCells.length)));
   return normalizeColumnSizes(sizes);
 };
 
@@ -547,43 +592,78 @@ const findMultiColTableRows = (td) => {
     const rows = getDirectTableRows(table);
     for (const row of rows) {
       const cells = Array.from(row.cells || []);
-      // Only 2-4 cells count as content columns; more is layout/spacer
+      // Only 2-4 cells count as meaningful content columns
       if (cells.length < 2 || cells.length > 4) continue;
 
-      // Every cell must have real content (text or image)
-      const allHaveContent = cells.every((c) => {
+      const contentCells = cells.filter((c) => {
         const text = `${c.textContent || ''}`.trim();
         const hasImg = c.querySelector?.('img');
-        return (text.length > 2 && !isDecorativeSeparator(text)) || hasImg;
+        return (text.length > 0 && !isDecorativeSeparator(text)) || hasImg;
       });
-      if (!allHaveContent) continue;
+      if (contentCells.length < 2) continue;
+
+      // Avoid rows that are mostly tiny spacer cells
+      const meaningfulWidthCells = cells.filter((c) => {
+        const wAttr = c.getAttribute?.('width') || '';
+        const wStyle = extractStyleValue(c.getAttribute?.('style') || '', 'width');
+        const raw = `${wAttr || wStyle || ''}`.trim();
+        if (!raw) return true;
+        if (raw.endsWith('%')) {
+          const pct = Number.parseFloat(raw.replace('%', ''));
+          return !Number.isFinite(pct) || pct >= 15;
+        }
+        const px = Number.parseFloat(raw.replace(/px|pt/gi, ''));
+        return !Number.isFinite(px) || px >= 60;
+      });
+      if (meaningfulWidthCells.length < 2) continue;
 
       // Skip if already covered by a parent result
       const alreadyCovered = results.some((r) => r.table.contains(table) || table.contains(r.table));
       if (alreadyCovered) continue;
 
-      results.push({ table, row, cells });
+      results.push({ table, row, cells: contentCells });
     }
   }
   return results;
 };
 
-// Get bg color for a row: check tr, then first td, then walk up
+// Get bg color for a row: check tr, first td, nested bmeHolder tds, then walk up
 const getRowBg = (tr, tds) => {
   let bg = extractColor(tr, 'background-color');
   if (bg) return bg;
   if (tds.length > 0) {
     bg = extractColor(tds[0], 'background-color');
     if (bg) return bg;
+    // Check nested td elements (bmeHolder pattern)
+    const nestedTds = Array.from(tds[0].querySelectorAll?.('td') || []);
+    for (const ntd of nestedTds) {
+      bg = extractColor(ntd, 'background-color');
+      if (bg) return bg;
+    }
   }
   bg = findClosestColor(tr, 'background-color');
   return bg || '';
+};
+
+// Get background image for a row
+const getRowBgImage = (tr, tds) => {
+  let bgImg = extractBackgroundImage(tr.getAttribute?.('style') || '');
+  if (bgImg) return bgImg;
+  if (tds.length > 0) {
+    bgImg = extractBackgroundImage(tds[0].getAttribute?.('style') || '');
+    if (bgImg) return bgImg;
+  }
+  return '';
 };
 
 const defaultRowSettings = () => ({
   padding: { top: 0, right: 0, bottom: 0, left: 0 },
   margin: { top: 0, right: 0, bottom: 0, left: 0 },
   backgroundColor: '#ffffff',
+  backgroundImage: '',
+  backgroundSize: 'cover',
+  backgroundPosition: 'center',
+  backgroundRepeat: 'no-repeat',
   border: 'none',
   borderColor: '#000000',
   borderWidth: 0,
@@ -593,7 +673,11 @@ const defaultRowSettings = () => ({
 const defaultColSettings = () => ({
   padding: { top: 0, right: 0, bottom: 0, left: 0 },
   margin: { top: 0, right: 0, bottom: 0, left: 0 },
-  backgroundColor: '#ffffff',
+  backgroundColor: 'transparent',
+  backgroundImage: '',
+  backgroundSize: 'cover',
+  backgroundPosition: 'center',
+  backgroundRepeat: 'no-repeat',
   border: 'none',
   borderColor: '#000000',
   borderWidth: 0,
@@ -638,16 +722,28 @@ const findContentBlockElements = (sectionTd) => {
   });
   if (leafTables.length > 1) return leafTables;
 
+  if (contentTables.length > 0) return contentTables.slice(0, 12);
+
   // Fallback: treat entire section as one block
   return [sectionTd];
 };
 
 // Process section td into editor rows (template-agnostic)
-// sectionBg is applied directly to every created row
-const processContentBlocks = (sectionTd, rowIndexBase, now, sectionBg = '') => {
+// sectionBg and sectionBgImage are applied directly to every created row
+const processContentBlocks = (sectionTd, rowIndexBase, now, sectionBg = '', sectionBgImage = '') => {
   const editorRows = [];
   const blocks = findContentBlockElements(sectionTd);
   const rowBg = sectionBg || '#ffffff';
+  const rowBgImg = sectionBgImage || '';
+  const makeRowSettings = () => ({ ...defaultRowSettings(), backgroundColor: rowBg, backgroundImage: rowBgImg });
+  const makeColSettings = () => ({ ...defaultColSettings(), backgroundColor: rowBg });
+  const withSectionBg = (col) => ({
+    ...col,
+    settings: {
+      ...(col.settings || {}),
+      backgroundColor: (col.settings?.backgroundColor && col.settings.backgroundColor !== '#ffffff' && col.settings.backgroundColor !== 'transparent') ? col.settings.backgroundColor : rowBg,
+    },
+  });
 
   if (blocks.length === 0) return editorRows;
 
@@ -657,11 +753,11 @@ const processContentBlocks = (sectionTd, rowIndexBase, now, sectionBg = '') => {
     if (multiColRows.length > 0) {
       multiColRows.forEach((mcr, mIdx) => {
         const sizes = computeColumnSizes(mcr.cells);
-        const columns = mcr.cells.map((td, i) => createColumnFromCell(td, i, sizes[i], rowIndexBase * 100 + mIdx, now));
+        const columns = mcr.cells.map((td, i) => withSectionBg(createColumnFromCell(td, i, sizes[i], rowIndexBase * 100 + mIdx, now)));
         if (columns.some((c) => c.components.length > 0)) {
           editorRows.push({
             id: now + rowIndexBase * 100 + mIdx + 1,
-            settings: { ...defaultRowSettings(), backgroundColor: rowBg },
+            settings: makeRowSettings(),
             columns,
           });
         }
@@ -675,8 +771,8 @@ const processContentBlocks = (sectionTd, rowIndexBase, now, sectionBg = '') => {
     if (deduped.length > 0) {
       editorRows.push({
         id: now + rowIndexBase * 100 + 1,
-        settings: { ...defaultRowSettings(), backgroundColor: rowBg },
-        columns: [{ id: now + rowIndexBase * 100 + 2, label: 'Column 1', size: 12, settings: defaultColSettings(), components: deduped }],
+        settings: makeRowSettings(),
+        columns: [{ id: now + rowIndexBase * 100 + 2, label: 'Column 1', size: 12, settings: makeColSettings(), components: deduped }],
       });
     }
     return editorRows;
@@ -690,11 +786,11 @@ const processContentBlocks = (sectionTd, rowIndexBase, now, sectionBg = '') => {
     if (multiColRows.length > 0) {
       multiColRows.forEach((mcr, mIdx) => {
         const sizes = computeColumnSizes(mcr.cells);
-        const columns = mcr.cells.map((td, i) => createColumnFromCell(td, i, sizes[i], rowIndexBase * 100 + bIdx * 10 + mIdx, now));
+        const columns = mcr.cells.map((td, i) => withSectionBg(createColumnFromCell(td, i, sizes[i], rowIndexBase * 100 + bIdx * 10 + mIdx, now)));
         if (columns.some((c) => c.components.length > 0)) {
           editorRows.push({
             id: now + rowIndexBase * 100 + bIdx * 10 + mIdx + 1,
-            settings: { ...defaultRowSettings(), backgroundColor: rowBg },
+            settings: makeRowSettings(),
             columns,
           });
         }
@@ -709,8 +805,8 @@ const processContentBlocks = (sectionTd, rowIndexBase, now, sectionBg = '') => {
 
     editorRows.push({
       id: now + rowIndexBase * 100 + bIdx + 1,
-      settings: { ...defaultRowSettings(), backgroundColor: rowBg },
-      columns: [{ id: now + rowIndexBase * 100 + bIdx + 2, label: 'Column 1', size: 12, settings: defaultColSettings(), components: deduped }],
+      settings: makeRowSettings(),
+      columns: [{ id: now + rowIndexBase * 100 + bIdx + 2, label: 'Column 1', size: 12, settings: makeColSettings(), components: deduped }],
     });
   });
 
@@ -730,7 +826,13 @@ export const parseHtmlToSections = (htmlText) => {
     // Find main content table
     const tables = Array.from(body?.querySelectorAll?.('table') || []);
     const candidates = tables.filter((t) => !isNoiseTable(t));
-    const mainTable = candidates.reduce((best, t) => {
+    // Prefer the section-level table (bmeMainColumn) that has the colored section rows,
+    // NOT the outermost wrapper (bmeMainBody) which only has 1 row.
+    const preferredMainTable =
+      body?.querySelector?.('table[name="bmeMainColumn"]') ||
+      body?.querySelector?.('table[name="bmeMainContent"]') ||
+      body?.querySelector?.('table[name="bmeMainColumnParentTable"]');
+    const mainTable = preferredMainTable || candidates.reduce((best, t) => {
       const score = getTableScore(t);
       if (!best) return t;
       return score > getTableScore(best) ? t : best;
@@ -747,20 +849,30 @@ export const parseHtmlToSections = (htmlText) => {
         if (tds.length === 0) return;
 
         const sectionBg = getRowBg(tr, tds);
+        const sectionBgImage = getRowBgImage(tr, tds);
         let contentRows;
 
         if (tds.length > 1) {
           // True multi-column row at main table level
           const sizes = computeColumnSizes(tds);
-          const columns = tds.map((td, i) => createColumnFromCell(td, i, sizes[i], sectionIndex, now));
+          const columns = tds.map((td, i) => {
+            const column = createColumnFromCell(td, i, sizes[i], sectionIndex, now);
+            return {
+              ...column,
+              settings: {
+                ...(column.settings || {}),
+                backgroundColor: (column.settings?.backgroundColor && column.settings.backgroundColor !== '#ffffff') ? column.settings.backgroundColor : (sectionBg || 'transparent'),
+              },
+            };
+          });
           contentRows = [{
             id: now + sectionIndex * 100 + 1,
-            settings: { ...defaultRowSettings(), backgroundColor: sectionBg || '#ffffff' },
+            settings: { ...defaultRowSettings(), backgroundColor: sectionBg || '#ffffff', backgroundImage: sectionBgImage },
             columns,
           }];
         } else {
           // Single-cell row — detect content blocks inside, pass section bg
-          contentRows = processContentBlocks(tds[0], sectionIndex, now, sectionBg);
+          contentRows = processContentBlocks(tds[0], sectionIndex, now, sectionBg, sectionBgImage);
         }
 
         // Propagate section background to ALL content rows from this section

@@ -88,9 +88,16 @@ const DroppableRow = ({ row, setComponents, parentId, index, moveRow, updateSect
   const rowSettingsStyle = (() => {
     const s = row?.settings || {};
     const out = {};
-    const isWhiteBg = (c) => !c || c === '#ffffff' || c === '#fff' || c === 'rgb(255, 255, 255)' || c === 'rgba(255, 255, 255, 1)' || c === 'transparent';
-    if (s.backgroundColor && !isWhiteBg(s.backgroundColor)) {
+    // Always apply background color from settings
+    if (s.backgroundColor) {
       out.backgroundColor = s.backgroundColor;
+    }
+    // Apply background image
+    if (s.backgroundImage) {
+      out.backgroundImage = `url('${s.backgroundImage}')`;
+      out.backgroundSize = s.backgroundSize || 'cover';
+      out.backgroundPosition = s.backgroundPosition || 'center';
+      out.backgroundRepeat = s.backgroundRepeat || 'no-repeat';
     }
     if (s.padding && typeof s.padding === 'object') {
       const { top = 0, right = 0, bottom = 0, left = 0 } = s.padding;

@@ -13,7 +13,7 @@ export const rowStyle = {
   borderRadius: '4px',
   padding: '30px', // Added padding to create space for icons
   marginBottom: '8px',
-  backgroundColor: '#ffffff',
+  backgroundColor: 'transparent',
   display: 'flex',
   flexWrap: 'nowrap', // Prevent wrapping
   justifyContent: 'space-around',

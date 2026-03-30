@@ -45,9 +45,8 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
     const s = component?.settings || {};
     const styles = {};
 
-    // Background
-    const isWhiteBg = (c) => !c || c === '#ffffff' || c === '#fff' || c === 'rgb(255, 255, 255)' || c === 'rgba(255, 255, 255, 1)' || c === 'transparent';
-    if (s.backgroundColor && !isWhiteBg(s.backgroundColor)) {
+    // Background - always apply
+    if (s.backgroundColor && s.backgroundColor !== 'transparent') {
       styles.backgroundColor = s.backgroundColor;
     }
     if (s.backgroundImage) {
@@ -368,12 +367,32 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
       case COMPONENT_TYPES.MENU:
         return (
           <Box onClick={handleSelect} p={4} border="1px dashed" borderColor="teal.300" borderRadius="md" style={componentStyles}>
-            <Text color="teal.500" fontWeight="bold">☰ Menu Placeholder</Text>
+            <Box
+              mb={3}
+              display="flex"
+              flexWrap="wrap"
+              justifyContent={component.settings?.textAlign || 'center'}
+              gap="8px"
+            >
+              {(component.menuItems || component.content || 'Home\nAbout\nServices\nContact')
+                .split('\n')
+                .filter(Boolean)
+                .map((item, index) => (
+                  <Text
+                    key={`${component.id}-menu-${index}`}
+                    color={component.settings?.textColor || '#333333'}
+                    fontSize={component.settings?.fontSize || 'md'}
+                    fontWeight={component.settings?.fontWeight || 'normal'}
+                  >
+                    {item}
+                  </Text>
+                ))}
+            </Box>
             <textarea
               placeholder="Menu items (one per line)"
               value={component.menuItems || 'Home\nAbout\nServices\nContact'}
               onChange={(e) => handleChange({ ...component, menuItems: e.target.value })}
-              style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px', minHeight: '80px' }}
+              style={{ width: '100%', background: 'transparent', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px', minHeight: '80px', color: component.settings?.textColor || '#333333', textAlign: component.settings?.textAlign || 'center' }}
             />
           </Box>
         );
