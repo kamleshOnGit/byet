@@ -44,6 +44,13 @@ const parsePxValue = (val) => {
   return Number.isFinite(n) ? n : null;
 };
 
+const normalizeDimensionValue = (value) => {
+  const raw = `${value || ''}`.trim();
+  if (!raw) return '';
+  if (/^\d+(?:\.\d+)?$/.test(raw)) return `${raw}px`;
+  return raw;
+};
+
 const parseBoxShorthand = (styleText, propName) => {
   const out = { top: 0, right: 0, bottom: 0, left: 0 };
   const p = extractStyleValue(styleText, propName);
@@ -122,10 +129,87 @@ const extractDimensions = (el) => {
   const style = el.getAttribute('style') || '';
   const result = {};
   const width = el.getAttribute('width') || extractStyleValue(style, 'width');
-  if (width) result.width = width;
+  if (width) result.width = normalizeDimensionValue(width);
   const height = el.getAttribute('height') || extractStyleValue(style, 'height');
-  if (height) result.height = height;
+  if (height) result.height = normalizeDimensionValue(height);
   return result;
+};
+
+const extractBackgroundSettings = (el) => {
+  if (!el || !el.getAttribute) {
+    return {
+      backgroundColor: '',
+      backgroundImage: '',
+      backgroundSize: '',
+      backgroundPosition: '',
+      backgroundRepeat: '',
+    };
+  }
+  const style = el.getAttribute('style') || '';
+  return {
+    backgroundColor: extractColor(el, 'background-color') || '',
+    backgroundImage: extractBackgroundImage(style) || '',
+    backgroundSize: extractStyleValue(style, 'background-size') || '',
+    backgroundPosition: extractStyleValue(style, 'background-position') || '',
+    backgroundRepeat: extractStyleValue(style, 'background-repeat') || '',
+  };
+};
+
+const findLikelyContentWidth = (root) => {
+  if (!root) return '600px';
+  const rawCandidates = Array.from(root.querySelectorAll?.('*') || []).map((el) => {
+    const style = el.getAttribute?.('style') || '';
+    return el.getAttribute?.('width') || extractStyleValue(style, 'max-width') || extractStyleValue(style, 'width') || '';
+  });
+  const candidates = rawCandidates
+    .map((value) => `${value || ''}`.trim())
+    .filter(Boolean)
+    .map((value) => {
+      if (value.endsWith('%')) return null;
+      const match = value.match(/(\d+(?:\.\d+)?)/);
+      if (!match) return null;
+      const px = Math.round(Number.parseFloat(match[1]));
+      return (px >= 320 && px <= 800) ? px : null;
+    })
+    .filter((value) => Number.isFinite(value));
+  if (candidates.length === 0) return '600px';
+
+  const counts = new Map();
+  candidates.forEach((px) => counts.set(px, (counts.get(px) || 0) + 1));
+  const best = Array.from(counts.entries()).sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1];
+    return Math.abs(a[0] - 600) - Math.abs(b[0] - 600);
+  })[0]?.[0];
+  return `${best || 600}px`;
+};
+
+const extractTemplateSettings = (body, referenceEl = null) => {
+  const bodyStyle = body?.getAttribute?.('style') || '';
+  const bodyFont = extractFontStyles(body);
+  const refFont = extractFontStyles(referenceEl);
+  const bodyBg = extractColor(body, 'background-color') || findClosestColor(referenceEl || body, 'background-color', 4) || '#ffffff';
+  const bodyBgImage = extractBackgroundImage(bodyStyle) || extractBackgroundImage(referenceEl?.getAttribute?.('style') || '');
+  const bodyBgSize = extractStyleValue(bodyStyle, 'background-size') || extractStyleValue(referenceEl?.getAttribute?.('style') || '', 'background-size') || '';
+  const bodyBgPosition = extractStyleValue(bodyStyle, 'background-position') || extractStyleValue(referenceEl?.getAttribute?.('style') || '', 'background-position') || '';
+  const bodyBgRepeat = extractStyleValue(bodyStyle, 'background-repeat') || extractStyleValue(referenceEl?.getAttribute?.('style') || '', 'background-repeat') || '';
+  const refBg = extractColor(referenceEl, 'background-color');
+
+  return {
+    fontFamily: bodyFont.fontFamily || refFont.fontFamily || 'Arial, sans-serif',
+    fontSize: bodyFont.fontSize || refFont.fontSize || '14px',
+    fontWeight: bodyFont.fontWeight || refFont.fontWeight || 'normal',
+    lineHeight: bodyFont.lineHeight || refFont.lineHeight || '1.5',
+    textColor: bodyFont.textColor || refFont.textColor || '#000000',
+    bodyBackgroundColor: bodyBg || '#ffffff',
+    bodyBackgroundImage: bodyBgImage || '',
+    bodyBackgroundSize: bodyBgSize || 'cover',
+    bodyBackgroundPosition: bodyBgPosition || 'center',
+    bodyBackgroundRepeat: bodyBgRepeat || 'no-repeat',
+    containerBackgroundColor: (refBg && refBg !== bodyBg) ? refBg : 'transparent',
+    containerWidth: findLikelyContentWidth(referenceEl || body),
+    containerMinHeight: 'auto',
+    containerPadding: '0px',
+  };
 };
 
 // Walk up DOM to collect inherited font styles (closest ancestor wins)
@@ -155,16 +239,33 @@ const isHiddenElement = (el) => {
 
 const isNoiseTable = (tableEl) => {
   if (!tableEl) return false;
-  const name = `${tableEl.getAttribute?.('name') || ''}`.toLowerCase();
-  if (['blk_permission', 'blk_footer', 'blk_divider', 'blk_spacer'].includes(name)) return true;
   if (isHiddenElement(tableEl)) return true;
+  // Tracking pixels / spacer tables: single cell with only a tiny image or nbsp
+  const rows = getDirectTableRows(tableEl);
+  if (rows.length === 1 && rows[0].cells?.length === 1) {
+    const cell = rows[0].cells[0];
+    const text = `${cell.textContent || ''}`.replace(/[\s\u00a0]+/g, '').trim();
+    const imgs = Array.from(cell.querySelectorAll?.('img') || []);
+    if (text.length === 0 && imgs.length === 0) return true;
+    if (imgs.length === 1 && imgs[0].width <= 2 && imgs[0].height <= 2) return true;
+  }
   return false;
 };
 
 const isDividerTable = (tableEl) => {
   if (!tableEl) return false;
-  const name = `${tableEl.getAttribute?.('name') || ''}`.toLowerCase();
-  return name === 'blk_divider';
+  // A divider table has 1 row, 1 cell, only empty content or border-based visual
+  const rows = getDirectTableRows(tableEl);
+  if (rows.length !== 1) return false;
+  const cells = Array.from(rows[0].cells || []);
+  if (cells.length !== 1) return false;
+  const text = `${cells[0].textContent || ''}`.replace(/[\s\u00a0]+/g, '').trim();
+  const hasImg = cells[0].querySelector?.('img');
+  if (text.length === 0 && !hasImg) {
+    const style = cells[0].getAttribute?.('style') || '';
+    if (style.includes('border-top') || style.includes('min-width: 1px')) return true;
+  }
+  return false;
 };
 
 const getDirectTableRows = (tableEl) => {
@@ -184,17 +285,28 @@ const getTableScore = (tableEl) => {
   const directRows = getDirectTableRows(tableEl);
   const directRowCount = directRows.length;
   const directCellCount = directRows.reduce((sum, r) => sum + (r.cells ? r.cells.length : 0), 0);
-  const name = `${tableEl.getAttribute?.('name') || ''}`.toLowerCase();
   const width = (tableEl.getAttribute?.('width') || extractStyleValue(tableEl.getAttribute?.('style') || '', 'width') || '').toLowerCase();
   let bonus = 0;
-  if (name === 'bmemainbody') bonus += 20000;
-  if (name === 'bmemaincolumnparenttable') bonus += 18000;
-  if (name === 'bmemaincolumn') bonus += 16000;
-  if (name === 'bmemaincontent') bonus += 12000;
-  if (name.includes('bmemaincolumn') || name.includes('bmemaincontent') || name.includes('maincontent')) bonus += 5000;
-  if (name.includes('mainbody') || name.includes('maincolumnparent')) bonus += 4000;
-  if (`${width}`.includes('600')) bonus += 2000;
-  if (width === '100%') bonus += 500;
+  // Prefer tables with many direct rows (section containers)
+  if (directRowCount >= 3) bonus += directRowCount * 1000;
+  // Prefer typical email widths (500-700px)
+  const pxMatch = `${width}`.match(/(\d+)/);
+  if (pxMatch) {
+    const px = parseInt(pxMatch[1], 10);
+    if (px >= 500 && px <= 700) bonus += 3000;
+  }
+  // Slight bonus for 100% width (layout tables)
+  if (width === '100%') bonus += 200;
+  // Bonus for tables that have colored rows (section containers)
+  let coloredRows = 0;
+  directRows.forEach((r) => {
+    const tds = Array.from(r.cells || []);
+    tds.forEach((td) => {
+      const bg = extractColor(td, 'background-color');
+      if (bg && bg !== '#ffffff' && bg !== 'rgb(255, 255, 255)') coloredRows++;
+    });
+  });
+  bonus += coloredRows * 500;
   return bonus + directRowCount * 200 + directCellCount * 20;
 };
 
@@ -226,38 +338,51 @@ const createComponentSettings = (el, baseSettings = {}) => {
   const defaults = {
     padding: { top: 0, right: 0, bottom: 0, left: 0 },
     margin: { top: 0, right: 0, bottom: 0, left: 0 },
-    fontSize: 'md',
-    fontWeight: 'normal',
-    textAlign: 'left',
-    textColor: '#000000',
-    backgroundColor: '#ffffff',
+    fontSize: '',
+    fontWeight: '',
+    fontFamily: '',
+    textAlign: '',
+    textColor: '',
+    backgroundColor: 'transparent',
     backgroundImage: '',
+    backgroundSize: '',
+    backgroundPosition: '',
+    backgroundRepeat: '',
     border: 'none',
     borderColor: '#000000',
     borderWidth: 0,
     borderRadius: 0,
-    letterSpacing: 'normal',
-    lineHeight: 'normal',
+    letterSpacing: '',
+    lineHeight: '',
     linkColor: '#0066cc',
     buttonColor: '#0066cc',
     buttonTextColor: '#ffffff',
     listStyleType: 'disc',
+    width: '',
+    height: '',
+    boxSizing: 'border-box',
   };
   if (!el || !el.getAttribute) return { ...defaults, ...baseSettings };
 
   const inherited = collectInheritedStyles(el);
   const directFont = extractFontStyles(el);
   const style = el.getAttribute('style') || '';
+  const padding = parsePadding(style);
+  const margin = parseMargin(style);
   const borderStyles = extractBorderStyles(style);
-  const bgImage = extractBackgroundImage(style);
+  const bgSettings = extractBackgroundSettings(el);
   const align = extractAlign(el);
+  const dims = extractDimensions(el);
 
   return {
     ...defaults,
     ...inherited,
     ...directFont,
+    padding,
+    margin,
+    ...bgSettings,
+    ...dims,
     textAlign: align || inherited.textAlign || defaults.textAlign,
-    backgroundImage: bgImage || defaults.backgroundImage,
     ...borderStyles,
     ...baseSettings,
   };
@@ -659,7 +784,7 @@ const getRowBgImage = (tr, tds) => {
 const defaultRowSettings = () => ({
   padding: { top: 0, right: 0, bottom: 0, left: 0 },
   margin: { top: 0, right: 0, bottom: 0, left: 0 },
-  backgroundColor: '#ffffff',
+  backgroundColor: 'transparent',
   backgroundImage: '',
   backgroundSize: 'cover',
   backgroundPosition: 'center',
@@ -814,6 +939,104 @@ const processContentBlocks = (sectionTd, rowIndexBase, now, sectionBg = '', sect
 };
 
 // ============================================================================
+// DIV-BASED SECTION DETECTION (for Unlayer, Stripo, modern templates)
+// ============================================================================
+
+const extractBgFromElement = (el) => {
+  if (!el || !el.getAttribute) return { bg: '', bgImage: '' };
+  const style = el.getAttribute('style') || '';
+  const bg = extractColor(el, 'background-color') || '';
+  const bgImage = extractBackgroundImage(style);
+  return { bg, bgImage };
+};
+
+const findDivSections = (body) => {
+  // Look for div-based row containers (Unlayer pattern: div.u-row-container)
+  const rowContainers = Array.from(body.querySelectorAll?.('div') || []).filter((div) => {
+    const cls = `${div.className || ''}`.toLowerCase();
+    const style = `${div.getAttribute?.('style') || ''}`.toLowerCase();
+    // Unlayer: u-row-container; Stripo: section; generic: row containers with background
+    return cls.includes('u-row-container') || cls.includes('section') ||
+      (style.includes('background') && div.children?.length >= 1 && div.querySelector?.('table'));
+  });
+  if (rowContainers.length < 2) return null;
+  return rowContainers;
+};
+
+const processDivSection = (divContainer, sectionIndex, now) => {
+  const { bg, bgImage } = extractBgFromElement(divContainer);
+  // Also check child divs for bg
+  let sectionBg = bg;
+  let sectionBgImage = bgImage;
+  if (!sectionBg) {
+    Array.from(divContainer.children || []).forEach((child) => {
+      if (!sectionBg) {
+        const childBg = extractColor(child, 'background-color');
+        if (childBg) sectionBg = childBg;
+      }
+      if (!sectionBgImage) {
+        const childBgImg = extractBackgroundImage(child.getAttribute?.('style') || '');
+        if (childBgImg) sectionBgImage = childBgImg;
+      }
+    });
+  }
+
+  const rowBg = sectionBg || '#ffffff';
+  const rowBgImg = sectionBgImage || '';
+
+  // Find columns inside this section (div.u-col or table-cell divs)
+  const colDivs = Array.from(divContainer.querySelectorAll?.('div') || []).filter((d) => {
+    const cls = `${d.className || ''}`.toLowerCase();
+    const style = `${d.getAttribute?.('style') || ''}`.toLowerCase();
+    return cls.includes('u-col') || (style.includes('display: table-cell') || style.includes('display:table-cell'));
+  });
+
+  if (colDivs.length > 1) {
+    const sizes = colDivs.map(() => Math.max(1, Math.round(12 / colDivs.length)));
+    const normalized = normalizeColumnSizes(sizes);
+    const columns = colDivs.map((colDiv, i) => {
+      const comps = [];
+      extractComponentsFromElement(colDiv, comps);
+      const deduped = deduplicateComponents(comps);
+      const colBg = extractColor(colDiv, 'background-color');
+      return {
+        id: now + sectionIndex * 1000 + i + 2,
+        label: `Column ${i + 1}`,
+        size: normalized[i],
+        settings: { ...defaultColSettings(), backgroundColor: colBg || rowBg },
+        components: deduped,
+      };
+    });
+    if (columns.some((c) => c.components.length > 0)) {
+      return [{
+        id: now + sectionIndex * 100 + 1,
+        settings: { ...defaultRowSettings(), backgroundColor: rowBg, backgroundImage: rowBgImg },
+        columns,
+      }];
+    }
+  }
+
+  // Single column: extract all content from this section container
+  const comps = [];
+  extractComponentsFromElement(divContainer, comps);
+  const deduped = deduplicateComponents(comps);
+  if (deduped.length > 0) {
+    return [{
+      id: now + sectionIndex * 100 + 1,
+      settings: { ...defaultRowSettings(), backgroundColor: rowBg, backgroundImage: rowBgImg },
+      columns: [{
+        id: now + sectionIndex * 100 + 2,
+        label: 'Column 1',
+        size: 12,
+        settings: { ...defaultColSettings(), backgroundColor: rowBg },
+        components: deduped,
+      }],
+    }];
+  }
+  return [];
+};
+
+// ============================================================================
 // MAIN PARSER
 // ============================================================================
 
@@ -822,23 +1045,38 @@ export const parseHtmlToSections = (htmlText) => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(htmlText || '', 'text/html');
     const body = doc.body;
+    const now = Date.now();
 
-    // Find main content table
+    // Strategy 1: Try div-based section detection (Unlayer, Stripo, modern templates)
+    const divSections = findDivSections(body);
+    if (divSections && divSections.length >= 2) {
+      const allRows = [];
+      divSections.forEach((div, idx) => {
+        const rows = processDivSection(div, idx, now);
+        allRows.push(...rows);
+      });
+      if (allRows.length > 0) {
+        const compactedRows = allRows.filter((r) => {
+          const cols = Array.from(r.columns || []);
+          return cols.some((c) => (c.components || []).length > 0);
+        });
+        if (compactedRows.length > 0) {
+          return {
+            sections: [{ id: now, rows: compactedRows }],
+            templateSettings: extractTemplateSettings(body, divSections[0]),
+          };
+        }
+      }
+    }
+
+    // Strategy 2: Table-based templates — find the best content table by structure
     const tables = Array.from(body?.querySelectorAll?.('table') || []);
     const candidates = tables.filter((t) => !isNoiseTable(t));
-    // Prefer the section-level table (bmeMainColumn) that has the colored section rows,
-    // NOT the outermost wrapper (bmeMainBody) which only has 1 row.
-    const preferredMainTable =
-      body?.querySelector?.('table[name="bmeMainColumn"]') ||
-      body?.querySelector?.('table[name="bmeMainContent"]') ||
-      body?.querySelector?.('table[name="bmeMainColumnParentTable"]');
-    const mainTable = preferredMainTable || candidates.reduce((best, t) => {
+    const mainTable = candidates.reduce((best, t) => {
       const score = getTableScore(t);
       if (!best) return t;
       return score > getTableScore(best) ? t : best;
     }, null);
-
-    const now = Date.now();
 
     if (mainTable) {
       const mainRows = getDirectTableRows(mainTable);
@@ -853,7 +1091,6 @@ export const parseHtmlToSections = (htmlText) => {
         let contentRows;
 
         if (tds.length > 1) {
-          // True multi-column row at main table level
           const sizes = computeColumnSizes(tds);
           const columns = tds.map((td, i) => {
             const column = createColumnFromCell(td, i, sizes[i], sectionIndex, now);
@@ -861,7 +1098,7 @@ export const parseHtmlToSections = (htmlText) => {
               ...column,
               settings: {
                 ...(column.settings || {}),
-                backgroundColor: (column.settings?.backgroundColor && column.settings.backgroundColor !== '#ffffff') ? column.settings.backgroundColor : (sectionBg || 'transparent'),
+                backgroundColor: (column.settings?.backgroundColor && column.settings.backgroundColor !== '#ffffff' && column.settings.backgroundColor !== 'transparent') ? column.settings.backgroundColor : (sectionBg || 'transparent'),
               },
             };
           });
@@ -871,11 +1108,10 @@ export const parseHtmlToSections = (htmlText) => {
             columns,
           }];
         } else {
-          // Single-cell row — detect content blocks inside, pass section bg
           contentRows = processContentBlocks(tds[0], sectionIndex, now, sectionBg, sectionBgImage);
         }
 
-        // Propagate section background to ALL content rows from this section
+        // Propagate section background to ALL content rows
         if (contentRows.length > 0 && sectionBg) {
           contentRows.forEach((row) => {
             if (!row.settings.backgroundColor || row.settings.backgroundColor === '#ffffff') {
@@ -887,7 +1123,6 @@ export const parseHtmlToSections = (htmlText) => {
         allSectionRows.push(...contentRows);
       });
 
-      // Filter out empty rows
       const compactedRows = allSectionRows.filter((r) => {
         const cols = Array.from(r.columns || []);
         const hasComponents = cols.some((c) => (c.components || []).length > 0);
@@ -896,25 +1131,31 @@ export const parseHtmlToSections = (htmlText) => {
         return !!(bg && bg !== '#ffffff' && bg !== 'transparent');
       });
 
-      return [{ id: now, rows: compactedRows }];
+      return {
+        sections: [{ id: now, rows: compactedRows }],
+        templateSettings: extractTemplateSettings(body, mainTable),
+      };
     }
 
     // Fallback: no table structure
     const components = [];
     extractComponentsFromElement(body, components);
     const deduped = deduplicateComponents(components);
-    return [{
-      id: now,
-      rows: [{
-        id: now + 1,
-        settings: { padding: { top: 10, right: 10, bottom: 10, left: 10 }, margin: { top: 0, right: 0, bottom: 0, left: 0 }, backgroundColor: '#ffffff', border: 'none', borderColor: '#dddddd', borderWidth: 0, borderRadius: 0 },
-        columns: [{
-          id: now + 2, label: 'Column 1', size: 12,
-          settings: { padding: { top: 10, right: 10, bottom: 10, left: 10 }, margin: { top: 0, right: 0, bottom: 0, left: 0 }, backgroundColor: '#ffffff', border: 'none', borderColor: '#cccccc', borderWidth: 0, borderRadius: 0 },
-          components: deduped,
+    return {
+      sections: [{
+        id: now,
+        rows: [{
+          id: now + 1,
+          settings: { padding: { top: 10, right: 10, bottom: 10, left: 10 }, margin: { top: 0, right: 0, bottom: 0, left: 0 }, backgroundColor: 'transparent', border: 'none', borderColor: '#dddddd', borderWidth: 0, borderRadius: 0 },
+          columns: [{
+            id: now + 2, label: 'Column 1', size: 12,
+            settings: { padding: { top: 10, right: 10, bottom: 10, left: 10 }, margin: { top: 0, right: 0, bottom: 0, left: 0 }, backgroundColor: 'transparent', border: 'none', borderColor: '#cccccc', borderWidth: 0, borderRadius: 0 },
+            components: deduped,
+          }],
         }],
       }],
-    }];
+      templateSettings: extractTemplateSettings(body, body),
+    };
   } catch (e) {
     console.error('Failed to parse uploaded HTML:', e);
     return null;

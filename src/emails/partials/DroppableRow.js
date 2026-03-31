@@ -52,6 +52,7 @@ const DroppableRow = ({ row, setComponents, parentId, index, moveRow, updateSect
   const duplicateRow = () => {
     const newRow = {
       id: Date.now(),
+      settings: { ...(row.settings || {}) },
       columns: row.columns.map(col => ({
         ...col,
         id: Date.now() + Math.random(),
@@ -89,7 +90,7 @@ const DroppableRow = ({ row, setComponents, parentId, index, moveRow, updateSect
     const s = row?.settings || {};
     const out = {};
     // Always apply background color from settings
-    if (s.backgroundColor) {
+    if (s.backgroundColor && s.backgroundColor !== 'transparent') {
       out.backgroundColor = s.backgroundColor;
     }
     // Apply background image
@@ -102,11 +103,88 @@ const DroppableRow = ({ row, setComponents, parentId, index, moveRow, updateSect
     if (s.padding && typeof s.padding === 'object') {
       const { top = 0, right = 0, bottom = 0, left = 0 } = s.padding;
       if (top || right || bottom || left) {
-        out.padding = `${Math.max(top, 30)}px ${Math.max(right, 10)}px ${Math.max(bottom, 10)}px ${Math.max(left, 10)}px`;
+        out.padding = `${top}px ${right}px ${bottom}px ${left}px`;
       }
+    }
+    if (s.margin && typeof s.margin === 'object') {
+      const { top = 0, right = 0, bottom = 0, left = 0 } = s.margin;
+      if (top || right || bottom || left) {
+        out.margin = `${top}px ${right}px ${bottom}px ${left}px`;
+      }
+    }
+    if (s.border && s.border !== 'none' && s.borderWidth) {
+      out.border = `${s.borderWidth}px ${s.border} ${s.borderColor || '#000000'}`;
+    }
+    if (s.textAlign) {
+      out.textAlign = s.textAlign;
+    }
+    if (s.boxSizing) {
+      out.boxSizing = s.boxSizing;
+    }
+    if (s.width) {
+      out.width = s.width;
+    }
+    if (s.height) {
+      out.height = s.height;
+    }
+    if (s.minHeight) {
+      out.minHeight = s.minHeight;
+    }
+    if (s.color) {
+      out.color = s.color;
+    }
+    if (s.textColor) {
+      out.color = s.textColor;
+    }
+    if (s.fontFamily) {
+      out.fontFamily = s.fontFamily;
+    }
+    if (s.fontSize) {
+      out.fontSize = s.fontSize;
+    }
+    if (s.fontWeight) {
+      out.fontWeight = s.fontWeight;
+    }
+    if (s.lineHeight) {
+      out.lineHeight = s.lineHeight;
+    }
+    if (s.letterSpacing) {
+      out.letterSpacing = s.letterSpacing;
     }
     if (s.borderRadius) {
       out.borderRadius = `${s.borderRadius}px`;
+    } else if (s.borderRadius === 0) {
+      out.borderRadius = '0px';
+    }
+    if (s.display) {
+      out.display = s.display;
+    }
+    if (s.justifyContent) {
+      out.justifyContent = s.justifyContent;
+    }
+    if (s.alignItems) {
+      out.alignItems = s.alignItems;
+    }
+    if (s.flexWrap) {
+      out.flexWrap = s.flexWrap;
+    }
+    if (s.flexDirection) {
+      out.flexDirection = s.flexDirection;
+    }
+    if (s.overflow) {
+      out.overflow = s.overflow;
+    }
+    if (s.maxWidth) {
+      out.maxWidth = s.maxWidth;
+    }
+    if (s.minWidth) {
+      out.minWidth = s.minWidth;
+    }
+    if (s.maxHeight) {
+      out.maxHeight = s.maxHeight;
+    }
+    if (s.minHeight) {
+      out.minHeight = s.minHeight;
     }
     return out;
   })();
@@ -118,7 +196,12 @@ const DroppableRow = ({ row, setComponents, parentId, index, moveRow, updateSect
       style={{
         ...rowStyle,
         ...rowSettingsStyle,
-        border: isSelected ? '2px solid #3182ce' : rowStyle.border,
+        justifyContent: 'flex-start',
+        alignItems: 'stretch',
+        padding: rowSettingsStyle.padding || '0px',
+        border: rowSettingsStyle.border || '1px solid transparent',
+        outline: isSelected ? '2px solid #3182ce' : 'none',
+        minHeight: rowSettingsStyle.minHeight || '0px',
       }}
     >
       <Box position="absolute" top="2px" left="2px">

@@ -22,12 +22,21 @@ const EmailList = () => {
 
     try {
       const text = await file.text();
-      const importedSections = parseHtmlToSections(text);
+      const parsedTemplate = parseHtmlToSections(text);
+      if (!parsedTemplate) return;
+
+      const importedSections = Array.isArray(parsedTemplate)
+        ? parsedTemplate
+        : parsedTemplate.sections;
+      const importedTemplateSettings = Array.isArray(parsedTemplate)
+        ? null
+        : parsedTemplate.templateSettings;
       if (!importedSections) return;
 
       navigate('/create', {
         state: {
           importedSections,
+          importedTemplateSettings,
         },
       });
     } catch (err) {

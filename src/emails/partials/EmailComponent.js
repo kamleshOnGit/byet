@@ -21,9 +21,10 @@ const updateComponent = (updatedComponent, parentId, rowId, columnId, setSection
 const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onSelect, selectedTarget }) => {
   const { type, content } = component;
 
-  const handleChange = (e) => {
-    const value = e?.target?.value || ''; // Safely access e.target.value
-    const updatedComponent = { ...component, content: value };
+  const handleChange = (nextValue) => {
+    const updatedComponent = (nextValue && typeof nextValue === 'object' && nextValue.target)
+      ? { ...component, content: nextValue.target.value || '' }
+      : (nextValue && typeof nextValue === 'object' ? nextValue : { ...component, content: nextValue || '' });
     updateComponent(updatedComponent, parentId, rowId, columnId, setSections);
   };
 
@@ -39,6 +40,8 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
       });
     }
   };
+
+  const isSelected = selectedTarget?.kind === 'component' && selectedTarget?.id === component.id;
 
   // Apply styles from component settings
   const applyComponentStyles = () => {
@@ -79,6 +82,36 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
     if (s.borderRadius) {
       styles.borderRadius = `${s.borderRadius}px`;
     }
+    if (s.textAlign) {
+      styles.textAlign = s.textAlign;
+    }
+    if (s.textColor) {
+      styles.color = s.textColor;
+    }
+    if (s.fontFamily) {
+      styles.fontFamily = s.fontFamily;
+    }
+    if (s.fontSize) {
+      styles.fontSize = s.fontSize;
+    }
+    if (s.fontWeight) {
+      styles.fontWeight = s.fontWeight;
+    }
+    if (s.lineHeight) {
+      styles.lineHeight = s.lineHeight;
+    }
+    if (s.letterSpacing) {
+      styles.letterSpacing = s.letterSpacing;
+    }
+    if (s.width) {
+      styles.width = s.width;
+    }
+    if (s.height) {
+      styles.height = s.height;
+    }
+    if (s.boxSizing) {
+      styles.boxSizing = s.boxSizing;
+    }
 
     return styles;
   };
@@ -86,6 +119,22 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
   const renderContent = () => {
     // Apply styles
     const componentStyles = applyComponentStyles();
+    const textEditorStyle = {
+      width: '100%',
+      background: 'transparent',
+      border: 'none',
+      outline: 'none',
+      padding: 0,
+      margin: 0,
+      resize: 'none',
+      fontFamily: component.settings?.fontFamily || 'inherit',
+      fontSize: component.settings?.fontSize || 'inherit',
+      fontWeight: component.settings?.fontWeight || 'inherit',
+      textAlign: component.settings?.textAlign || 'inherit',
+      color: component.settings?.textColor || 'inherit',
+      lineHeight: component.settings?.lineHeight || 'inherit',
+      letterSpacing: component.settings?.letterSpacing || 'inherit',
+    };
     
     switch (type) {
       case COMPONENT_TYPES.BUTTON:
@@ -99,148 +148,127 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
               border: 'none',
             }}
           >
-            <input
-              type="text"
-              value={content || 'Click Me'}
-              onChange={handleChange}
-              style={{ 
-                background: 'transparent', 
-                border: 'none', 
-                color: component.settings?.buttonTextColor || '#ffffff',
-                fontSize: component.settings?.fontSize || 'md',
-                fontWeight: component.settings?.fontWeight || 'normal',
-                textAlign: component.settings?.textAlign || 'left',
-              }}
-            />
+            {isSelected ? (
+              <input
+                type="text"
+                value={content || 'Click Me'}
+                onChange={handleChange}
+                style={{ 
+                  ...textEditorStyle,
+                  width: 'auto',
+                  color: component.settings?.buttonTextColor || '#ffffff',
+                }}
+              />
+            ) : (content || 'Click Me')}
           </Button>
         );
       case COMPONENT_TYPES.TEXT:
         return (
           <Text onClick={handleSelect} style={componentStyles}>
-            <input
-              type="text"
-              value={content || 'This is a text block'}
-              onChange={handleChange}
-              style={{ 
-                background: 'transparent', 
-                border: 'none',
-                fontSize: component.settings?.fontSize || 'md',
-                fontWeight: component.settings?.fontWeight || 'normal',
-                textAlign: component.settings?.textAlign || 'left',
-                color: component.settings?.textColor || '#000000',
-              }}
-            />
+            {isSelected ? (
+              <input
+                type="text"
+                value={content || 'This is a text block'}
+                onChange={handleChange}
+                style={textEditorStyle}
+              />
+            ) : (
+              <Box as="span" whiteSpace="pre-wrap">{content || 'This is a text block'}</Box>
+            )}
           </Text>
         );
       case COMPONENT_TYPES.PARAGRAPH:
         return (
           <Text onClick={handleSelect} style={componentStyles}>
-            <textarea
-              value={content || 'This is a paragraph'}
-              onChange={handleChange}
-              style={{ 
-                width: '100%', 
-                background: 'transparent', 
-                border: '1px solid gray', 
-                borderRadius: '4px',
-                fontSize: component.settings?.fontSize || 'md',
-                fontWeight: component.settings?.fontWeight || 'normal',
-                textAlign: component.settings?.textAlign || 'left',
-                color: component.settings?.textColor || '#000000',
-              }}
-            />
+            {isSelected ? (
+              <textarea
+                value={content || 'This is a paragraph'}
+                onChange={handleChange}
+                style={textEditorStyle}
+              />
+            ) : (
+              <Box as="span" whiteSpace="pre-wrap">{content || 'This is a paragraph'}</Box>
+            )}
           </Text>
         );
       case COMPONENT_TYPES.ORDERED_LIST:
         return (
           <ol onClick={handleSelect} style={componentStyles}>
-            <textarea
-              value={content || '1. Item 1\n2. Item 2'}
-              onChange={handleChange}
-              style={{ 
-                width: '100%', 
-                background: 'transparent', 
-                border: '1px solid gray', 
-                borderRadius: '4px',
-                fontSize: component.settings?.fontSize || 'md',
-                fontWeight: component.settings?.fontWeight || 'normal',
-                textAlign: component.settings?.textAlign || 'left',
-                color: component.settings?.textColor || '#000000',
-              }}
-            />
+            {isSelected ? (
+              <textarea
+                value={content || '1. Item 1\n2. Item 2'}
+                onChange={handleChange}
+                style={textEditorStyle}
+              />
+            ) : (
+              (content || '1. Item 1\n2. Item 2').split('\n').filter(Boolean).map((item, index) => (
+                <li key={`${component.id}-ol-${index}`}>{item}</li>
+              ))
+            )}
           </ol>
         );
       case COMPONENT_TYPES.UNORDERED_LIST:
         return (
           <ul onClick={handleSelect} style={componentStyles}>
-            <textarea
-              value={content || '- Item 1\n- Item 2'}
-              onChange={handleChange}
-              style={{ 
-                width: '100%', 
-                background: 'transparent', 
-                border: '1px solid gray', 
-                borderRadius: '4px',
-                fontSize: component.settings?.fontSize || 'md',
-                fontWeight: component.settings?.fontWeight || 'normal',
-                textAlign: component.settings?.textAlign || 'left',
-                color: component.settings?.textColor || '#000000',
-              }}
-            />
+            {isSelected ? (
+              <textarea
+                value={content || '- Item 1\n- Item 2'}
+                onChange={handleChange}
+                style={textEditorStyle}
+              />
+            ) : (
+              (content || '- Item 1\n- Item 2').split('\n').filter(Boolean).map((item, index) => (
+                <li key={`${component.id}-ul-${index}`}>{item}</li>
+              ))
+            )}
           </ul>
         );
       case COMPONENT_TYPES.HEADER_1:
         return (
           <Heading size="lg" onClick={handleSelect} style={componentStyles}>
-            <input
-              type="text"
-              value={content || 'Header 1'}
-              onChange={handleChange}
-              style={{ 
-                background: 'transparent', 
-                border: 'none', 
-                fontWeight: 'bold',
-                fontSize: component.settings?.fontSize || 'lg',
-                textAlign: component.settings?.textAlign || 'left',
-                color: component.settings?.textColor || '#000000',
-              }}
-            />
+            {isSelected ? (
+              <input
+                type="text"
+                value={content || 'Header 1'}
+                onChange={handleChange}
+                style={{ 
+                  ...textEditorStyle,
+                  fontWeight: component.settings?.fontWeight || 'bold',
+                }}
+              />
+            ) : (content || 'Header 1')}
           </Heading>
         );
       case COMPONENT_TYPES.HEADER_2:
         return (
           <Heading size="md" onClick={handleSelect} style={componentStyles}>
-            <input
-              type="text"
-              value={content || 'Header 2'}
-              onChange={handleChange}
-              style={{ 
-                background: 'transparent', 
-                border: 'none', 
-                fontWeight: 'bold',
-                fontSize: component.settings?.fontSize || 'md',
-                textAlign: component.settings?.textAlign || 'left',
-                color: component.settings?.textColor || '#000000',
-              }}
-            />
+            {isSelected ? (
+              <input
+                type="text"
+                value={content || 'Header 2'}
+                onChange={handleChange}
+                style={{ 
+                  ...textEditorStyle,
+                  fontWeight: component.settings?.fontWeight || 'bold',
+                }}
+              />
+            ) : (content || 'Header 2')}
           </Heading>
         );
       case COMPONENT_TYPES.HEADER_3:
         return (
           <Heading size="sm" onClick={handleSelect} style={componentStyles}>
-            <input
-              type="text"
-              value={content || 'Header 3'}
-              onChange={handleChange}
-              style={{ 
-                background: 'transparent', 
-                border: 'none', 
-                fontWeight: 'bold',
-                fontSize: component.settings?.fontSize || 'sm',
-                textAlign: component.settings?.textAlign || 'left',
-                color: component.settings?.textColor || '#000000',
-              }}
-            />
+            {isSelected ? (
+              <input
+                type="text"
+                value={content || 'Header 3'}
+                onChange={handleChange}
+                style={{ 
+                  ...textEditorStyle,
+                  fontWeight: component.settings?.fontWeight || 'bold',
+                }}
+              />
+            ) : (content || 'Header 3')}
           </Heading>
         );
       case COMPONENT_TYPES.IMAGE:
@@ -249,14 +277,18 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
             <Image
               src={component.imageUrl || 'https://dummyimage.com/100x50/cccccc/000000.png'}
               alt="Placeholder Image"
+              w={component.settings?.width || undefined}
+              h={component.settings?.height || undefined}
             />
-            <input
-              type="text"
-              placeholder="Image URL"
-              value={component.imageUrl}
-              onChange={(e) => handleChange({ ...component, imageUrl: e.target.value })}
-              style={{ border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px' }}
-            />
+            {isSelected && (
+              <input
+                type="text"
+                placeholder="Image URL"
+                value={component.imageUrl}
+                onChange={(e) => handleChange({ ...component, imageUrl: e.target.value })}
+                style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px' }}
+              />
+            )}
           </Box>
         );
       case COMPONENT_TYPES.LINK:
@@ -266,37 +298,33 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
             onClick={handleSelect}
             style={componentStyles}
           >
-            <input
-              type="text"
-              value={content || 'Visit our site'}
-              onChange={handleChange}
-              style={{ 
-                background: 'transparent', 
-                border: 'none', 
-                color: component.settings?.linkColor || '#0066cc',
-                fontSize: component.settings?.fontSize || 'md',
-                fontWeight: component.settings?.fontWeight || 'normal',
-                textAlign: component.settings?.textAlign || 'left',
-              }}
-            />
+            {isSelected ? (
+              <input
+                type="text"
+                value={content || 'Visit our site'}
+                onChange={handleChange}
+                style={{ 
+                  ...textEditorStyle,
+                  color: component.settings?.linkColor || '#0066cc',
+                }}
+              />
+            ) : (content || 'Visit our site')}
           </Link>
         );
       case COMPONENT_TYPES.HEADING:
         return (
           <Heading size="md" onClick={handleSelect} style={componentStyles}>
-            <input
-              type="text"
-              value={content || 'This is a heading'}
-              onChange={handleChange}
-              style={{ 
-                background: 'transparent', 
-                border: 'none', 
-                fontWeight: 'bold',
-                fontSize: component.settings?.fontSize || 'md',
-                textAlign: component.settings?.textAlign || 'left',
-                color: component.settings?.textColor || '#000000',
-              }}
-            />
+            {isSelected ? (
+              <input
+                type="text"
+                value={content || 'This is a heading'}
+                onChange={handleChange}
+                style={{ 
+                  ...textEditorStyle,
+                  fontWeight: component.settings?.fontWeight || 'bold',
+                }}
+              />
+            ) : (content || 'This is a heading')}
           </Heading>
         );
       case COMPONENT_TYPES.HR:
@@ -305,63 +333,73 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
         return (
           <Box onClick={handleSelect} p={4} border="1px dashed" borderColor="red.300" borderRadius="md" style={componentStyles}>
             <Text color="red.500" fontWeight="bold">▶ Video Placeholder</Text>
-            <input
-              type="text"
-              placeholder="Video URL"
-              value={component.videoUrl || ''}
-              onChange={(e) => handleChange({ ...component, videoUrl: e.target.value })}
-              style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px' }}
-            />
+            {isSelected && (
+              <input
+                type="text"
+                placeholder="Video URL"
+                value={component.videoUrl || ''}
+                onChange={(e) => handleChange({ ...component, videoUrl: e.target.value })}
+                style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px' }}
+              />
+            )}
           </Box>
         );
       case COMPONENT_TYPES.TABLE:
         return (
           <Box onClick={handleSelect} p={4} border="1px dashed" borderColor="purple.300" borderRadius="md" style={componentStyles}>
             <Text color="purple.500" fontWeight="bold">▦ Table Placeholder</Text>
-            <textarea
-              placeholder="Table content (CSV format)"
-              value={component.tableData || 'Header 1,Header 2,Header 3\nRow 1 Col 1,Row 1 Col 2,Row 1 Col 3\nRow 2 Col 1,Row 2 Col 2,Row 2 Col 3'}
-              onChange={(e) => handleChange({ ...component, tableData: e.target.value })}
-              style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px', minHeight: '80px' }}
-            />
+            {isSelected && (
+              <textarea
+                placeholder="Table content (CSV format)"
+                value={component.tableData || 'Header 1,Header 2,Header 3\nRow 1 Col 1,Row 1 Col 2,Row 1 Col 3\nRow 2 Col 1,Row 2 Col 2,Row 2 Col 3'}
+                onChange={(e) => handleChange({ ...component, tableData: e.target.value })}
+                style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px', minHeight: '80px' }}
+              />
+            )}
           </Box>
         );
       case COMPONENT_TYPES.SPACE:
         return (
           <Box onClick={handleSelect} p={4} border="1px dashed" borderColor="gray.300" borderRadius="md" style={componentStyles}>
-            <Text color="gray.500" fontWeight="bold">␣ Space Placeholder</Text>
-            <input
-              type="number"
-              placeholder="Height (px)"
-              value={component.height || 20}
-              onChange={(e) => handleChange({ ...component, height: parseInt(e.target.value) || 0 })}
-              style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px' }}
-            />
+            {!isSelected && <Box h={`${component.height || 20}px`} />}
+            {isSelected && (
+              <input
+                type="number"
+                placeholder="Height (px)"
+                value={component.height || 20}
+                onChange={(e) => handleChange({ ...component, height: parseInt(e.target.value) || 0 })}
+                style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px' }}
+              />
+            )}
           </Box>
         );
       case COMPONENT_TYPES.ICON:
         return (
           <Box onClick={handleSelect} p={4} border="1px dashed" borderColor="yellow.300" borderRadius="md" style={componentStyles}>
             <Text color="yellow.500" fontWeight="bold">★ Icon Placeholder</Text>
-            <input
-              type="text"
-              placeholder="Icon class or name"
-              value={component.iconName || 'star'}
-              onChange={(e) => handleChange({ ...component, iconName: e.target.value })}
-              style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px' }}
-            />
+            {isSelected && (
+              <input
+                type="text"
+                placeholder="Icon class or name"
+                value={component.iconName || 'star'}
+                onChange={(e) => handleChange({ ...component, iconName: e.target.value })}
+                style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px' }}
+              />
+            )}
           </Box>
         );
       case COMPONENT_TYPES.HTML:
         return (
           <Box onClick={handleSelect} p={4} border="1px dashed" borderColor="orange.300" borderRadius="md" style={componentStyles}>
-            <Text color="orange.500" fontWeight="bold">{'<>'} HTML Placeholder</Text>
-            <textarea
-              placeholder="HTML content"
-              value={component.htmlContent || '<div>Custom HTML content</div>'}
-              onChange={(e) => handleChange({ ...component, htmlContent: e.target.value })}
-              style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px', minHeight: '80px', fontFamily: 'monospace' }}
-            />
+            <Box dangerouslySetInnerHTML={{ __html: component.htmlContent || '<div>Custom HTML content</div>' }} />
+            {isSelected && (
+              <textarea
+                placeholder="HTML content"
+                value={component.htmlContent || '<div>Custom HTML content</div>'}
+                onChange={(e) => handleChange({ ...component, htmlContent: e.target.value })}
+                style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px', minHeight: '80px', fontFamily: 'monospace' }}
+              />
+            )}
           </Box>
         );
       case COMPONENT_TYPES.MENU:
@@ -388,60 +426,64 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                   </Text>
                 ))}
             </Box>
-            <textarea
-              placeholder="Menu items (one per line)"
-              value={component.menuItems || 'Home\nAbout\nServices\nContact'}
-              onChange={(e) => handleChange({ ...component, menuItems: e.target.value })}
-              style={{ width: '100%', background: 'transparent', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px', minHeight: '80px', color: component.settings?.textColor || '#333333', textAlign: component.settings?.textAlign || 'center' }}
-            />
+            {isSelected && (
+              <textarea
+                placeholder="Menu items (one per line)"
+                value={component.menuItems || 'Home\nAbout\nServices\nContact'}
+                onChange={(e) => handleChange({ ...component, menuItems: e.target.value })}
+                style={{ width: '100%', background: 'transparent', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px', minHeight: '80px', color: component.settings?.textColor || '#333333', textAlign: component.settings?.textAlign || 'center' }}
+              />
+            )}
           </Box>
         );
       case COMPONENT_TYPES.SOCIAL_LINK:
         return (
           <Box onClick={handleSelect} p={3} border="1px dashed" borderColor="blue.300" borderRadius="md" style={componentStyles}>
             <Text color="blue.500" fontWeight="bold" fontSize="sm">@ Social Link</Text>
-            <input
-              type="text"
-              placeholder="Social profile URL"
-              value={component.linkUrl || 'https://facebook.com'}
-              onChange={(e) => handleChange({ ...component, linkUrl: e.target.value })}
-              style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px' }}
-            />
-            <input
-              type="text"
-              placeholder="Label"
-              value={content || 'Facebook'}
-              onChange={handleChange}
-              style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px' }}
-            />
+            {isSelected && (
+              <>
+                <input
+                  type="text"
+                  placeholder="Social profile URL"
+                  value={component.linkUrl || 'https://facebook.com'}
+                  onChange={(e) => handleChange({ ...component, linkUrl: e.target.value })}
+                  style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px' }}
+                />
+                <input
+                  type="text"
+                  placeholder="Label"
+                  value={content || 'Facebook'}
+                  onChange={handleChange}
+                  style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px' }}
+                />
+              </>
+            )}
           </Box>
         );
       case COMPONENT_TYPES.SOCIAL_ICONS:
         return (
           <Box onClick={handleSelect} p={3} border="1px dashed" borderColor="blue.200" borderRadius="md" style={componentStyles} display="flex" flexWrap="wrap" gap="8px" justifyContent="center">
             <Text w="100%" color="blue.500" fontWeight="bold" fontSize="sm" textAlign="center">Social Icons</Text>
-            <textarea
-              placeholder="Social URLs (one per line)"
-              value={component.socialUrls || 'https://facebook.com\nhttps://twitter.com\nhttps://instagram.com'}
-              onChange={(e) => handleChange({ ...component, socialUrls: e.target.value })}
-              style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px', minHeight: '60px' }}
-            />
+            {isSelected && (
+              <textarea
+                placeholder="Social URLs (one per line)"
+                value={component.socialUrls || 'https://facebook.com\nhttps://twitter.com\nhttps://instagram.com'}
+                onChange={(e) => handleChange({ ...component, socialUrls: e.target.value })}
+                style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px', minHeight: '60px' }}
+              />
+            )}
           </Box>
         );
       default:
         return null;
     }
   };
-
-  // Check if this component is selected
-  const isSelected = selectedTarget?.kind === 'component' && selectedTarget?.id === component.id;
   
   return (
     <Box 
-      mb={4}
-      border={isSelected ? "2px solid blue" : "none"}
+      mb={0}
       borderRadius="md"
-      p={isSelected ? "2px" : "0"}
+      style={{ outline: isSelected ? '2px solid #3182ce' : 'none' }}
     >
       {renderContent()}
     </Box>

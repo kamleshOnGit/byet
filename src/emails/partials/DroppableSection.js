@@ -15,7 +15,7 @@ const DroppableSection = ({ section, setComponents, updateSections, syncEditorTo
       settings: {
         padding: { top: 10, right: 10, bottom: 10, left: 10 },
         margin: { top: 0, right: 0, bottom: 0, left: 0 },
-        backgroundColor: '#ffffff',
+        backgroundColor: 'transparent',
         backgroundImage: '',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
@@ -37,7 +37,7 @@ const DroppableSection = ({ section, setComponents, updateSections, syncEditorTo
           settings: {
             padding: { top: 10, right: 10, bottom: 10, left: 10 },
             margin: { top: 0, right: 0, bottom: 0, left: 0 },
-            backgroundColor: '#ffffff',
+            backgroundColor: 'transparent',
             backgroundImage: '',
             backgroundSize: 'cover',
             backgroundPosition: 'center',
@@ -59,7 +59,7 @@ const DroppableSection = ({ section, setComponents, updateSections, syncEditorTo
           settings: {
             padding: { top: 10, right: 10, bottom: 10, left: 10 },
             margin: { top: 0, right: 0, bottom: 0, left: 0 },
-            backgroundColor: '#ffffff',
+            backgroundColor: 'transparent',
             backgroundImage: '',
             backgroundSize: 'cover',
             backgroundPosition: 'center',
@@ -94,10 +94,42 @@ const DroppableSection = ({ section, setComponents, updateSections, syncEditorTo
       if (item.layout) {
         const newRow = {
           id: Date.now(),
+          settings: {
+            padding: { top: 10, right: 10, bottom: 10, left: 10 },
+            margin: { top: 0, right: 0, bottom: 0, left: 0 },
+            backgroundColor: 'transparent',
+            backgroundImage: '',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+            border: 'none',
+            borderColor: '#dddddd',
+            borderWidth: 0,
+            borderRadius: 0,
+            boxSizing: 'border-box',
+            letterSpacing: 'normal',
+            lineHeight: 'normal',
+          },
           columns: item.layout.map((col, index) => ({
             ...col,
             id: Date.now() + index + 1,
-            components: []
+            components: [],
+            settings: {
+              padding: { top: 10, right: 10, bottom: 10, left: 10 },
+              margin: { top: 0, right: 0, bottom: 0, left: 0 },
+              backgroundColor: 'transparent',
+              backgroundImage: '',
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat',
+              border: 'none',
+              borderColor: '#cccccc',
+              borderWidth: 0,
+              borderRadius: 0,
+              boxSizing: 'border-box',
+              letterSpacing: 'normal',
+              lineHeight: 'normal',
+            }
           }))
         };
         
@@ -122,7 +154,7 @@ const DroppableSection = ({ section, setComponents, updateSections, syncEditorTo
   // Update section style when row layout is being dragged over
   const updatedSectionStyle = {
     ...sectionStyle,
-    backgroundColor: isOver ? '#e6f7ff' : sectionStyle.backgroundColor,
+    backgroundColor: isOver ? 'rgba(24, 144, 255, 0.06)' : sectionStyle.backgroundColor,
     border: isOver ? '2px dashed #1890ff' : sectionStyle.border
   };
   

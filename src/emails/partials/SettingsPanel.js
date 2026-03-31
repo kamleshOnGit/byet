@@ -8,21 +8,22 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
     margin: { top: 0, right: 0, bottom: 0, left: 0 },
     
     // Text styles
-    fontSize: 'md',
-    fontWeight: 'normal',
-    textAlign: 'left',
-    textColor: '#000000',
+    fontSize: '',
+    fontWeight: '',
+    fontFamily: '',
+    textAlign: '',
+    textColor: '',
     
     // Background
-    backgroundColor: '#ffffff',
+    backgroundColor: 'transparent',
     backgroundImage: '',
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     backgroundRepeat: 'no-repeat',
     
     // Dimensions
-    width: '100%',
-    height: 'auto',
+    width: '',
+    height: '',
     
     // Border
     border: 'none',
@@ -31,18 +32,18 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
     borderRadius: 0,
 
     // Typography
-    letterSpacing: 'normal',
-    lineHeight: 'normal',
+    letterSpacing: '',
+    lineHeight: '',
 
     // Layout
     boxSizing: 'border-box',
     
     // Link specific
-    linkColor: '#0066cc',
+    linkColor: '',
     
     // Button specific
-    buttonColor: '#0066cc',
-    buttonTextColor: '#ffffff',
+    buttonColor: '',
+    buttonTextColor: '',
 
     // List specific
     listStyleType: 'disc',
@@ -55,27 +56,28 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
         // Start with default settings
         padding: { top: 0, right: 0, bottom: 0, left: 0 },
         margin: { top: 0, right: 0, bottom: 0, left: 0 },
-        fontSize: 'md',
-        fontWeight: 'normal',
-        textAlign: 'left',
-        textColor: '#000000',
-        backgroundColor: '#ffffff',
+        fontSize: '',
+        fontWeight: '',
+        fontFamily: '',
+        textAlign: '',
+        textColor: '',
+        backgroundColor: 'transparent',
         backgroundImage: '',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
-        width: '100%',
-        height: 'auto',
+        width: '',
+        height: '',
         border: 'none',
         borderColor: '#000000',
         borderWidth: 0,
         borderRadius: 0,
-        letterSpacing: 'normal',
-        lineHeight: 'normal',
+        letterSpacing: '',
+        lineHeight: '',
         boxSizing: 'border-box',
-        linkColor: '#0066cc',
-        buttonColor: '#0066cc',
-        buttonTextColor: '#ffffff',
+        linkColor: '',
+        buttonColor: '',
+        buttonTextColor: '',
         listStyleType: 'disc',
         // Then override with target settings
         ...selectedTarget.data.settings
@@ -190,16 +192,12 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
 
             <Box mb={3}>
               <Text fontSize="xs" mb={1}>Font Weight</Text>
-              <Select
+              <Input
                 value={templateSettings?.fontWeight || 'normal'}
                 onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, fontWeight: e.target.value })}
                 size="sm"
-              >
-                <option value="normal">Normal</option>
-                <option value="bold">Bold</option>
-                <option value="lighter">Lighter</option>
-                <option value="bolder">Bolder</option>
-              </Select>
+                placeholder="normal / bold / 700"
+              />
             </Box>
 
             <Box mb={3}>
@@ -215,10 +213,10 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
             <Box mb={3}>
               <Text fontSize="xs" mb={1}>Text Color</Text>
               <Input
-                type="color"
                 value={templateSettings?.textColor || '#000000'}
                 onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, textColor: e.target.value })}
                 size="sm"
+                placeholder="#000000 / rgb(...) / inherit"
               />
             </Box>
 
@@ -228,20 +226,60 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
             <Box mb={3}>
               <Text fontSize="xs" mb={1}>Body Background Color</Text>
               <Input
-                type="color"
                 value={templateSettings?.bodyBackgroundColor || '#f5f5f5'}
                 onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, bodyBackgroundColor: e.target.value })}
                 size="sm"
+                placeholder="transparent / #f5f5f5 / rgba(...)"
+              />
+            </Box>
+
+            <Box mb={3}>
+              <Text fontSize="xs" mb={1}>Body Background Image</Text>
+              <Input
+                value={templateSettings?.bodyBackgroundImage || ''}
+                onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, bodyBackgroundImage: e.target.value })}
+                size="sm"
+                placeholder="https://..."
+              />
+            </Box>
+
+            <Box mb={3}>
+              <Text fontSize="xs" mb={1}>Body Background Size</Text>
+              <Input
+                value={templateSettings?.bodyBackgroundSize || ''}
+                onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, bodyBackgroundSize: e.target.value })}
+                size="sm"
+                placeholder="cover / contain / 100% auto"
+              />
+            </Box>
+
+            <Box mb={3}>
+              <Text fontSize="xs" mb={1}>Body Background Position</Text>
+              <Input
+                value={templateSettings?.bodyBackgroundPosition || ''}
+                onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, bodyBackgroundPosition: e.target.value })}
+                size="sm"
+                placeholder="center / top center / 50% 0"
+              />
+            </Box>
+
+            <Box mb={3}>
+              <Text fontSize="xs" mb={1}>Body Background Repeat</Text>
+              <Input
+                value={templateSettings?.bodyBackgroundRepeat || ''}
+                onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, bodyBackgroundRepeat: e.target.value })}
+                size="sm"
+                placeholder="no-repeat / repeat-x"
               />
             </Box>
 
             <Box mb={3}>
               <Text fontSize="xs" mb={1}>Container Background Color</Text>
               <Input
-                type="color"
                 value={templateSettings?.containerBackgroundColor || '#ffffff'}
                 onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, containerBackgroundColor: e.target.value })}
                 size="sm"
+                placeholder="transparent / #ffffff / rgba(...)"
               />
             </Box>
 
@@ -412,16 +450,22 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
       
       <Box mb={3}>
         <Text fontSize="xs" mb={1}>Font Weight</Text>
-        <Select 
+        <Input 
           value={settings.fontWeight} 
           onChange={(e) => handleSettingChange('fontWeight', e.target.value)}
           size="sm"
-        >
-          <option value="normal">Normal</option>
-          <option value="bold">Bold</option>
-          <option value="lighter">Lighter</option>
-          <option value="bolder">Bolder</option>
-        </Select>
+          placeholder="normal / bold / 700"
+        />
+      </Box>
+
+      <Box mb={3}>
+        <Text fontSize="xs" mb={1}>Font Family</Text>
+        <Input
+          value={settings.fontFamily}
+          onChange={(e) => handleSettingChange('fontFamily', e.target.value)}
+          size="sm"
+          placeholder="Arial, sans-serif"
+        />
       </Box>
       
       <Box mb={3}>
@@ -441,10 +485,10 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
       <Box mb={3}>
         <Text fontSize="xs" mb={1}>Text Color</Text>
         <Input 
-          type="color" 
           value={settings.textColor} 
           onChange={(e) => handleSettingChange('textColor', e.target.value)}
           size="sm" 
+          placeholder="#000000 / rgb(...) / inherit"
         />
       </Box>
       
@@ -483,10 +527,10 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
       <Box mb={3}>
         <Text fontSize="xs" mb={1}>Background Color</Text>
         <Input 
-          type="color" 
           value={settings.backgroundColor} 
           onChange={(e) => handleSettingChange('backgroundColor', e.target.value)}
           size="sm" 
+          placeholder="transparent / #ffffff / rgba(...)"
         />
       </Box>
 
@@ -502,44 +546,32 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
 
       <Box mb={3}>
         <Text fontSize="xs" mb={1}>Background Size</Text>
-        <Select
+        <Input
           value={settings.backgroundSize}
           onChange={(e) => handleSettingChange('backgroundSize', e.target.value)}
           size="sm"
-        >
-          <option value="cover">Cover</option>
-          <option value="contain">Contain</option>
-          <option value="auto">Auto</option>
-        </Select>
+          placeholder="cover / contain / 100% auto"
+        />
       </Box>
 
       <Box mb={3}>
         <Text fontSize="xs" mb={1}>Background Position</Text>
-        <Select
+        <Input
           value={settings.backgroundPosition}
           onChange={(e) => handleSettingChange('backgroundPosition', e.target.value)}
           size="sm"
-        >
-          <option value="center">Center</option>
-          <option value="top">Top</option>
-          <option value="bottom">Bottom</option>
-          <option value="left">Left</option>
-          <option value="right">Right</option>
-        </Select>
+          placeholder="center / top center / 50% 0"
+        />
       </Box>
 
       <Box mb={3}>
         <Text fontSize="xs" mb={1}>Background Repeat</Text>
-        <Select
+        <Input
           value={settings.backgroundRepeat}
           onChange={(e) => handleSettingChange('backgroundRepeat', e.target.value)}
           size="sm"
-        >
-          <option value="no-repeat">No Repeat</option>
-          <option value="repeat">Repeat</option>
-          <option value="repeat-x">Repeat X</option>
-          <option value="repeat-y">Repeat Y</option>
-        </Select>
+          placeholder="no-repeat / repeat / repeat-x"
+        />
       </Box>
       
       <Divider my={4} />
@@ -594,10 +626,10 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
       <Box mb={3}>
         <Text fontSize="xs" mb={1}>Border Color</Text>
         <Input 
-          type="color" 
           value={settings.borderColor} 
           onChange={(e) => handleSettingChange('borderColor', e.target.value)}
           size="sm" 
+          placeholder="#000000 / rgba(...)"
         />
       </Box>
       
@@ -692,19 +724,19 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
           <Box mb={3}>
             <Text fontSize="xs" mb={1}>Button Color</Text>
             <Input 
-              type="color" 
               value={settings.buttonColor} 
               onChange={(e) => handleSettingChange('buttonColor', e.target.value)}
               size="sm" 
+              placeholder="#0066cc / rgba(...)"
             />
           </Box>
           <Box mb={3}>
             <Text fontSize="xs" mb={1}>Button Text Color</Text>
             <Input 
-              type="color" 
               value={settings.buttonTextColor} 
               onChange={(e) => handleSettingChange('buttonTextColor', e.target.value)}
               size="sm" 
+              placeholder="#ffffff / inherit"
             />
           </Box>
         </>
@@ -716,10 +748,10 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
           <Box mb={3}>
             <Text fontSize="xs" mb={1}>Link Color</Text>
             <Input 
-              type="color" 
               value={settings.linkColor} 
               onChange={(e) => handleSettingChange('linkColor', e.target.value)}
               size="sm" 
+              placeholder="#0066cc / inherit"
             />
           </Box>
         </>
@@ -734,27 +766,28 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
             // Reset to default values
             padding: { top: 0, right: 0, bottom: 0, left: 0 },
             margin: { top: 0, right: 0, bottom: 0, left: 0 },
-            fontSize: 'md',
-            fontWeight: 'normal',
-            textAlign: 'left',
-            textColor: '#000000',
-            backgroundColor: '#ffffff',
+            fontSize: '',
+            fontWeight: '',
+            fontFamily: '',
+            textAlign: '',
+            textColor: '',
+            backgroundColor: 'transparent',
             backgroundImage: '',
             backgroundSize: 'cover',
             backgroundPosition: 'center',
             backgroundRepeat: 'no-repeat',
-            width: '100%',
-            height: 'auto',
+            width: '',
+            height: '',
             border: 'none',
             borderColor: '#000000',
             borderWidth: 0,
             borderRadius: 0,
-            letterSpacing: 'normal',
-            lineHeight: 'normal',
+            letterSpacing: '',
+            lineHeight: '',
             boxSizing: 'border-box',
-            linkColor: '#0066cc',
-            buttonColor: '#0066cc',
-            buttonTextColor: '#ffffff',
+            linkColor: '',
+            buttonColor: '',
+            buttonTextColor: '',
             listStyleType: 'disc',
           };
           setSettings(defaultSettings);

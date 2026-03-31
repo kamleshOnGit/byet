@@ -154,11 +154,53 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, updateSections, syn
         out.padding = `${top}px ${right}px ${bottom}px ${left}px`;
       }
     }
+    if (s.margin && typeof s.margin === 'object') {
+      const { top = 0, right = 0, bottom = 0, left = 0 } = s.margin;
+      if (top || right || bottom || left) {
+        out.margin = `${top}px ${right}px ${bottom}px ${left}px`;
+      }
+    }
+    if (s.border && s.border !== 'none' && s.borderWidth) {
+      out.border = `${s.borderWidth}px ${s.border} ${s.borderColor || '#000000'}`;
+    }
     if (s.borderRadius) {
       out.borderRadius = `${s.borderRadius}px`;
     }
     if (s.textAlign) {
       out.textAlign = s.textAlign;
+    }
+    if (s.boxSizing) {
+      out.boxSizing = s.boxSizing;
+    }
+    if (s.width) {
+      out.width = s.width;
+    }
+    if (s.height) {
+      out.height = s.height;
+    }
+    if (s.minHeight) {
+      out.minHeight = s.minHeight;
+    }
+    if (s.color) {
+      out.color = s.color;
+    }
+    if (s.textColor) {
+      out.color = s.textColor;
+    }
+    if (s.fontFamily) {
+      out.fontFamily = s.fontFamily;
+    }
+    if (s.fontSize) {
+      out.fontSize = s.fontSize;
+    }
+    if (s.fontWeight) {
+      out.fontWeight = s.fontWeight;
+    }
+    if (s.lineHeight) {
+      out.lineHeight = s.lineHeight;
+    }
+    if (s.letterSpacing) {
+      out.letterSpacing = s.letterSpacing;
     }
     return out;
   })();
@@ -170,15 +212,19 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, updateSections, syn
       style={{
         ...columnParentStyle(colSpan),
         ...colSettingsStyle,
-        border: isSelected ? '2px solid #3182ce' : columnParentStyle(colSpan).border,
-        borderRadius: '6px',
+        border: colSettingsStyle.border || '1px solid transparent',
+        borderRadius: colSettingsStyle.borderRadius || '0px',
+        outline: isSelected ? '2px solid #3182ce' : 'none',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'flex-start',
         alignItems: 'stretch',
+        padding: colSettingsStyle.padding || '0px',
+        margin: colSettingsStyle.margin || '0px',
+        overflow: 'visible',
       }}
     >
-      <Box fontSize="xs" color="gray.500" mb={1}>{column.label}</Box>
+      {isSelected && <Box position="absolute" top="2px" right="6px" fontSize="xs" color="gray.500" zIndex={1}>{column.label}</Box>}
       {column.components &&
         column.components.map((comp, compIndex) => (
           <DraggableComponentInColumn

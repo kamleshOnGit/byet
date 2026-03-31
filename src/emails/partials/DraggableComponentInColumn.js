@@ -37,12 +37,13 @@ const DraggableComponentInColumn = ({ component, index, columnId, parentId, rowI
     <Box
       ref={(node) => drag(drop(node))}
       style={{
-        border: isSelected ? '2px solid blue' : '1px solid #ddd',
-        margin: '4px 0',
-        padding: '8px',
+        border: '1px solid transparent',
+        margin: 0,
+        padding: 0,
         backgroundColor: 'transparent',
         cursor: 'grab',
-        boxShadow: isSelected ? '0 0 0 2px rgba(0, 123, 255, 0.25)' : 'none',
+        outline: isSelected ? '2px solid #3182ce' : 'none',
+        boxShadow: 'none',
       }}
     >
       <EmailComponent
