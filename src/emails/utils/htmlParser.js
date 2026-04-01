@@ -857,7 +857,6 @@ const findContentBlockElements = (sectionTd) => {
 // sectionBg and sectionBgImage are applied directly to every created row
 const processContentBlocks = (sectionTd, rowIndexBase, now, sectionBg = '', sectionBgImage = '') => {
   const editorRows = [];
-  const blocks = findContentBlockElements(sectionTd);
   const rowBg = sectionBg || '#ffffff';
   const rowBgImg = sectionBgImage || '';
   const makeRowSettings = () => ({ ...defaultRowSettings(), backgroundColor: rowBg, backgroundImage: rowBgImg });
@@ -870,26 +869,32 @@ const processContentBlocks = (sectionTd, rowIndexBase, now, sectionBg = '', sect
     },
   });
 
+  // FIRST: Check for multi-column rows in the entire sectionTd before breaking into blocks
+  const multiColRows = findMultiColTableRows(sectionTd);
+  if (multiColRows.length > 0) {
+    multiColRows.forEach((mcr, mIdx) => {
+      const sizes = computeColumnSizes(mcr.cells);
+      const columns = mcr.cells.map((td, i) => withSectionBg(createColumnFromCell(td, i, sizes[i], rowIndexBase * 100 + mIdx, now)));
+      if (columns.some((c) => c.components.length > 0)) {
+        editorRows.push({
+          id: now + rowIndexBase * 100 + mIdx + 1,
+          settings: makeRowSettings(),
+          columns,
+        });
+      }
+    });
+    if (editorRows.length > 0) {
+      return editorRows;
+    }
+  }
+
+  // SECOND: Fall back to content block processing
+  const blocks = findContentBlockElements(sectionTd);
+
   if (blocks.length === 0) return editorRows;
 
   // If only 1 block and it's the sectionTd itself, do flat extraction
   if (blocks.length === 1 && blocks[0] === sectionTd) {
-    const multiColRows = findMultiColTableRows(sectionTd);
-    if (multiColRows.length > 0) {
-      multiColRows.forEach((mcr, mIdx) => {
-        const sizes = computeColumnSizes(mcr.cells);
-        const columns = mcr.cells.map((td, i) => withSectionBg(createColumnFromCell(td, i, sizes[i], rowIndexBase * 100 + mIdx, now)));
-        if (columns.some((c) => c.components.length > 0)) {
-          editorRows.push({
-            id: now + rowIndexBase * 100 + mIdx + 1,
-            settings: makeRowSettings(),
-            columns,
-          });
-        }
-      });
-      if (editorRows.length > 0) return editorRows;
-    }
-
     const comps = [];
     extractComponentsFromElement(sectionTd, comps);
     const deduped = deduplicateComponents(comps);
@@ -1058,7 +1063,11 @@ export const parseHtmlToSections = (htmlText) => {
       if (allRows.length > 0) {
         const compactedRows = allRows.filter((r) => {
           const cols = Array.from(r.columns || []);
-          return cols.some((c) => (c.components || []).length > 0);
+          const hasComponents = cols.some((c) => (c.components || []).length > 0);
+          if (hasComponents) return true;
+          const bg = r.settings?.backgroundColor;
+          const bgImg = r.settings?.backgroundImage;
+          return !!(bgImg || (bg && bg !== '#ffffff' && bg !== 'transparent'));
         });
         if (compactedRows.length > 0) {
           return {
@@ -1128,7 +1137,8 @@ export const parseHtmlToSections = (htmlText) => {
         const hasComponents = cols.some((c) => (c.components || []).length > 0);
         if (hasComponents) return true;
         const bg = r.settings?.backgroundColor;
-        return !!(bg && bg !== '#ffffff' && bg !== 'transparent');
+        const bgImg = r.settings?.backgroundImage;
+        return !!(bgImg || (bg && bg !== '#ffffff' && bg !== 'transparent'));
       });
 
       return {

@@ -198,10 +198,7 @@ const DroppableRow = ({ row, setComponents, parentId, index, moveRow, updateSect
         ...rowSettingsStyle,
         justifyContent: 'flex-start',
         alignItems: 'stretch',
-        padding: rowSettingsStyle.padding || '0px',
-        border: rowSettingsStyle.border || '1px solid transparent',
         outline: isSelected ? '2px solid #3182ce' : 'none',
-        minHeight: rowSettingsStyle.minHeight || '0px',
       }}
     >
       <Box position="absolute" top="2px" left="2px">

@@ -212,15 +212,11 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, updateSections, syn
       style={{
         ...columnParentStyle(colSpan),
         ...colSettingsStyle,
-        border: colSettingsStyle.border || '1px solid transparent',
-        borderRadius: colSettingsStyle.borderRadius || '0px',
         outline: isSelected ? '2px solid #3182ce' : 'none',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'flex-start',
         alignItems: 'stretch',
-        padding: colSettingsStyle.padding || '0px',
-        margin: colSettingsStyle.margin || '0px',
         overflow: 'visible',
       }}
     >

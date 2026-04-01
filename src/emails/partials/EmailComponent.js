@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Button, Text, Divider, Image, Link, Heading } from '@chakra-ui/react';
+import { Box, Image } from '@chakra-ui/react';
 import { COMPONENT_TYPES } from './componentTypes';
 
 // Email Components Renderer with Editable Fields
@@ -139,13 +139,20 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
     switch (type) {
       case COMPONENT_TYPES.BUTTON:
         return (
-          <Button 
+          <Box
+            as="a"
             onClick={handleSelect}
             style={{
               ...componentStyles,
+              display: 'inline-block',
+              cursor: 'pointer',
               backgroundColor: component.settings?.buttonColor || '#0066cc',
               color: component.settings?.buttonTextColor || '#ffffff',
               border: 'none',
+              padding: componentStyles.padding || '10px 20px',
+              borderRadius: componentStyles.borderRadius || '4px',
+              textDecoration: 'none',
+              textAlign: 'center',
             }}
           >
             {isSelected ? (
@@ -160,11 +167,11 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                 }}
               />
             ) : (content || 'Click Me')}
-          </Button>
+          </Box>
         );
       case COMPONENT_TYPES.TEXT:
         return (
-          <Text onClick={handleSelect} style={componentStyles}>
+          <Box as="div" onClick={handleSelect} style={componentStyles}>
             {isSelected ? (
               <input
                 type="text"
@@ -175,11 +182,11 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
             ) : (
               <Box as="span" whiteSpace="pre-wrap">{content || 'This is a text block'}</Box>
             )}
-          </Text>
+          </Box>
         );
       case COMPONENT_TYPES.PARAGRAPH:
         return (
-          <Text onClick={handleSelect} style={componentStyles}>
+          <Box as="p" onClick={handleSelect} style={{margin: 0, ...componentStyles}}>
             {isSelected ? (
               <textarea
                 value={content || 'This is a paragraph'}
@@ -189,7 +196,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
             ) : (
               <Box as="span" whiteSpace="pre-wrap">{content || 'This is a paragraph'}</Box>
             )}
-          </Text>
+          </Box>
         );
       case COMPONENT_TYPES.ORDERED_LIST:
         return (
@@ -225,7 +232,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
         );
       case COMPONENT_TYPES.HEADER_1:
         return (
-          <Heading size="lg" onClick={handleSelect} style={componentStyles}>
+          <Box as="h1" onClick={handleSelect} style={{margin: 0, fontWeight: 'bold', ...componentStyles}}>
             {isSelected ? (
               <input
                 type="text"
@@ -237,11 +244,11 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                 }}
               />
             ) : (content || 'Header 1')}
-          </Heading>
+          </Box>
         );
       case COMPONENT_TYPES.HEADER_2:
         return (
-          <Heading size="md" onClick={handleSelect} style={componentStyles}>
+          <Box as="h2" onClick={handleSelect} style={{margin: 0, fontWeight: 'bold', ...componentStyles}}>
             {isSelected ? (
               <input
                 type="text"
@@ -253,11 +260,11 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                 }}
               />
             ) : (content || 'Header 2')}
-          </Heading>
+          </Box>
         );
       case COMPONENT_TYPES.HEADER_3:
         return (
-          <Heading size="sm" onClick={handleSelect} style={componentStyles}>
+          <Box as="h3" onClick={handleSelect} style={{margin: 0, fontWeight: 'bold', ...componentStyles}}>
             {isSelected ? (
               <input
                 type="text"
@@ -269,7 +276,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                 }}
               />
             ) : (content || 'Header 3')}
-          </Heading>
+          </Box>
         );
       case COMPONENT_TYPES.IMAGE:
         return (
@@ -293,10 +300,11 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
         );
       case COMPONENT_TYPES.LINK:
         return (
-          <Link 
-            href={component.linkUrl || 'https://example.com'} 
+          <Box
+            as="a"
+            href={component.linkUrl || 'https://example.com'}
             onClick={handleSelect}
-            style={componentStyles}
+            style={{...componentStyles, color: component.settings?.linkColor || '#0066cc', textDecoration: 'underline', cursor: 'pointer'}}
           >
             {isSelected ? (
               <input
@@ -309,11 +317,11 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                 }}
               />
             ) : (content || 'Visit our site')}
-          </Link>
+          </Box>
         );
       case COMPONENT_TYPES.HEADING:
         return (
-          <Heading size="md" onClick={handleSelect} style={componentStyles}>
+          <Box as="h2" onClick={handleSelect} style={{margin: 0, fontWeight: 'bold', ...componentStyles}}>
             {isSelected ? (
               <input
                 type="text"
@@ -325,14 +333,14 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                 }}
               />
             ) : (content || 'This is a heading')}
-          </Heading>
+          </Box>
         );
       case COMPONENT_TYPES.HR:
-        return <Divider onClick={handleSelect} style={componentStyles} />;
+        return <Box as="hr" onClick={handleSelect} style={{border: 'none', borderTop: `1px solid ${component.settings?.borderColor || '#cccccc'}`, margin: 0, ...componentStyles}} />;
       case COMPONENT_TYPES.VIDEO:
         return (
           <Box onClick={handleSelect} p={4} border="1px dashed" borderColor="red.300" borderRadius="md" style={componentStyles}>
-            <Text color="red.500" fontWeight="bold">▶ Video Placeholder</Text>
+            <Box as="span" style={{color: '#E53E3E', fontWeight: 'bold'}}>▶ Video Placeholder</Box>
             {isSelected && (
               <input
                 type="text"
@@ -347,7 +355,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
       case COMPONENT_TYPES.TABLE:
         return (
           <Box onClick={handleSelect} p={4} border="1px dashed" borderColor="purple.300" borderRadius="md" style={componentStyles}>
-            <Text color="purple.500" fontWeight="bold">▦ Table Placeholder</Text>
+            <Box as="span" style={{color: '#805AD5', fontWeight: 'bold'}}>▦ Table Placeholder</Box>
             {isSelected && (
               <textarea
                 placeholder="Table content (CSV format)"
@@ -376,7 +384,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
       case COMPONENT_TYPES.ICON:
         return (
           <Box onClick={handleSelect} p={4} border="1px dashed" borderColor="yellow.300" borderRadius="md" style={componentStyles}>
-            <Text color="yellow.500" fontWeight="bold">★ Icon Placeholder</Text>
+            <Box as="span" style={{color: '#D69E2E', fontWeight: 'bold'}}>★ Icon Placeholder</Box>
             {isSelected && (
               <input
                 type="text"
@@ -416,14 +424,17 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                 .split('\n')
                 .filter(Boolean)
                 .map((item, index) => (
-                  <Text
+                  <Box
+                    as="span"
                     key={`${component.id}-menu-${index}`}
-                    color={component.settings?.textColor || '#333333'}
-                    fontSize={component.settings?.fontSize || 'md'}
-                    fontWeight={component.settings?.fontWeight || 'normal'}
+                    style={{
+                      color: component.settings?.textColor || '#333333',
+                      fontSize: component.settings?.fontSize || '16px',
+                      fontWeight: component.settings?.fontWeight || 'normal',
+                    }}
                   >
                     {item}
-                  </Text>
+                  </Box>
                 ))}
             </Box>
             {isSelected && (
@@ -439,7 +450,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
       case COMPONENT_TYPES.SOCIAL_LINK:
         return (
           <Box onClick={handleSelect} p={3} border="1px dashed" borderColor="blue.300" borderRadius="md" style={componentStyles}>
-            <Text color="blue.500" fontWeight="bold" fontSize="sm">@ Social Link</Text>
+            <Box as="span" style={{color: '#3182CE', fontWeight: 'bold', fontSize: '14px'}}>@ Social Link</Box>
             {isSelected && (
               <>
                 <input
@@ -463,7 +474,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
       case COMPONENT_TYPES.SOCIAL_ICONS:
         return (
           <Box onClick={handleSelect} p={3} border="1px dashed" borderColor="blue.200" borderRadius="md" style={componentStyles} display="flex" flexWrap="wrap" gap="8px" justifyContent="center">
-            <Text w="100%" color="blue.500" fontWeight="bold" fontSize="sm" textAlign="center">Social Icons</Text>
+            <Box as="span" style={{width: '100%', color: '#3182CE', fontWeight: 'bold', fontSize: '14px', textAlign: 'center', display: 'block'}}>Social Icons</Box>
             {isSelected && (
               <textarea
                 placeholder="Social URLs (one per line)"

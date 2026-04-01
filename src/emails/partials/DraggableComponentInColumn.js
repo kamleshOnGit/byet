@@ -38,7 +38,7 @@ const DraggableComponentInColumn = ({ component, index, columnId, parentId, rowI
       ref={(node) => drag(drop(node))}
       style={{
         border: '1px solid transparent',
-        margin: 0,
+        margin: '4px 0',
         padding: 0,
         backgroundColor: 'transparent',
         cursor: 'grab',
