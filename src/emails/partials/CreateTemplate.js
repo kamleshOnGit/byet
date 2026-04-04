@@ -439,6 +439,20 @@ const CreateTemplate = () => {
           const links = items.map((item) => `<a href="#" style="display:inline-block;padding:0 8px;${makeTextStyle({ ...s, textColor: s.textColor || '#333333' })}text-decoration:none;">${escapeHtml(item)}</a>`).join('');
           return wrap(`<div style="text-align:${s.textAlign || 'center'};">${links}</div>`);
         }
+        case COMPONENT_TYPES.DIV:
+          return wrap(`<div style="margin:0;${makeTextStyle(s)}${makeBoxStyle(s, { includeBackground: true, includePadding: true, includeBorder: true, includeRadius: true })}">${renderRichText(component.content)}</div>`);
+        case COMPONENT_TYPES.SPAN:
+          return wrap(`<span style="${makeTextStyle(s)}${makeBoxStyle(s, { includeBackground: true, includePadding: true, includeBorder: true, includeRadius: true })}">${renderRichText(component.content)}</span>`);
+        case COMPONENT_TYPES.NAV: {
+          const items = (component.content || '').split('\n').filter(Boolean);
+          const links = items.map((item) => `<a href="#" style="display:inline-block;padding:0 10px;${makeTextStyle(s)}text-decoration:none;">${escapeHtml(item)}</a>`).join('');
+          return wrap(`<div style="text-align:${s.textAlign || 'center'};${makeBoxStyle(s, { includeBackground: true, includePadding: true, includeBorder: true, includeRadius: true })}">${links || '<span>Navigation</span>'}</div>`);
+        }
+        case COMPONENT_TYPES.HEADER:
+        case COMPONENT_TYPES.FOOTER:
+        case COMPONENT_TYPES.SIDEBAR:
+        case COMPONENT_TYPES.BANNER:
+          return wrap(`<div style="margin:0;${makeTextStyle(s)}${makeBoxStyle(s, { includeBackground: true, includePadding: true, includeBorder: true, includeRadius: true })}">${renderRichText(component.content)}</div>`);
         default:
           return wrap(`<div style="margin:0;${makeTextStyle(s)}">${renderRichText(component.content)}</div>`);
       }

@@ -56,6 +56,20 @@ const DraggableComponent = ({ type }) => {
         return <Text fontSize="lg" color="orange.500">{'<>'}</Text>; // Icon for HTML
       case COMPONENT_TYPES.MENU:
         return <Text fontSize="lg" color="teal.500">☰</Text>; // Icon for Menu
+      case COMPONENT_TYPES.DIV:
+        return <Text fontSize="lg" fontWeight="bold" color="cyan.500">{"[ ]"}</Text>; // Icon for Div
+      case COMPONENT_TYPES.SPAN:
+        return <Text fontSize="lg" fontWeight="bold" color="pink.500">{"<S>"}</Text>; // Icon for Span
+      case COMPONENT_TYPES.NAV:
+        return <Text fontSize="lg" color="blue.400">🧭</Text>; // Icon for Nav
+      case COMPONENT_TYPES.HEADER:
+        return <Text fontSize="lg" color="orange.400">顶部</Text>; // Icon for Header
+      case COMPONENT_TYPES.FOOTER:
+        return <Text fontSize="lg" color="gray.400">底部</Text>; // Icon for Footer
+      case COMPONENT_TYPES.SIDEBAR:
+        return <Text fontSize="lg" color="purple.400">侧边</Text>; // Icon for Sidebar
+      case COMPONENT_TYPES.BANNER:
+        return <Text fontSize="lg" color="red.400">🖼️</Text>; // Icon for Banner
       default:
         return null; // Remove unknown elements
     }
@@ -103,6 +117,20 @@ const DraggableComponent = ({ type }) => {
         return "HTML";
       case COMPONENT_TYPES.MENU:
         return "Menu";
+      case COMPONENT_TYPES.DIV:
+        return "Div";
+      case COMPONENT_TYPES.SPAN:
+        return "Span";
+      case COMPONENT_TYPES.NAV:
+        return "Navbar";
+      case COMPONENT_TYPES.HEADER:
+        return "Header";
+      case COMPONENT_TYPES.FOOTER:
+        return "Footer";
+      case COMPONENT_TYPES.SIDEBAR:
+        return "Sidebar";
+      case COMPONENT_TYPES.BANNER:
+        return "Banner/Hero";
       default:
         return ""; // No title for unknown elements
     }

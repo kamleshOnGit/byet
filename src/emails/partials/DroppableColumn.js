@@ -56,6 +56,10 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, updateSections, syn
               return '<div>Custom HTML content</div>';
             case COMPONENT_TYPES.MENU:
               return 'Home\nAbout\nServices\nContact';
+            case COMPONENT_TYPES.DIV:
+              return 'This is a div block';
+            case COMPONENT_TYPES.SPAN:
+              return 'This is a span element';
             default:
               return '';
           }
@@ -215,8 +219,11 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, updateSections, syn
         outline: isSelected ? '2px solid #3182ce' : 'none',
         display: 'flex',
         flexDirection: 'column',
+        height: '100%',
+        minHeight: 'min-content',
+        flex: '1 0 auto',
         justifyContent: 'flex-start',
-        alignItems: 'stretch',
+        alignItems: column?.settings?.textAlign === 'center' ? 'center' : (column?.settings?.textAlign === 'right' ? 'flex-end' : 'stretch'),
         overflow: 'visible',
       }}
     >

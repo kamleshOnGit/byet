@@ -6,8 +6,106 @@ import { COMPONENT_TYPES } from '../partials/componentTypes';
  */
 
 // ============================================================================
+// STYLE MAPPING SYSTEM
+// ============================================================================
+
+/**
+ * Maps internal setting keys to CSS property names.
+ * Used for both extraction (import) and generation (export).
+ */
+export const STYLE_MAP = {
+  // Padding & Margin
+  'padding.top': 'padding-top',
+  'padding.right': 'padding-right',
+  'padding.bottom': 'padding-bottom',
+  'padding.left': 'padding-left',
+  'margin.top': 'margin-top',
+  'margin.right': 'margin-right',
+  'margin.bottom': 'margin-bottom',
+  'margin.left': 'margin-left',
+
+  // Text Styles
+  fontSize: 'font-size',
+  fontWeight: 'font-weight',
+  fontFamily: 'font-family',
+  textAlign: 'text-align',
+  textColor: 'color',
+  lineHeight: 'line-height',
+  letterSpacing: 'letter-spacing',
+
+  // Background
+  backgroundColor: 'background-color',
+  backgroundImage: 'background-image',
+  backgroundSize: 'background-size',
+  backgroundPosition: 'background-position',
+  backgroundRepeat: 'background-repeat',
+
+  // Dimensions
+  width: 'width',
+  height: 'height',
+  maxWidth: 'max-width',
+
+  // Border & Radius
+  border: 'border',
+  borderColor: 'border-color',
+  borderWidth: 'border-width',
+  borderRadius: 'border-radius',
+
+  // Layout
+  boxSizing: 'box-sizing',
+
+  // Component Specific
+  linkColor: 'color',
+  buttonColor: 'background-color',
+  buttonTextColor: 'color',
+  listStyleType: 'list-style-type',
+};
+
+/**
+ * Helper to generate a CSS style string from a settings object using the mapping.
+ */
+export const generateCssFromSettings = (settings, options = {}) => {
+  if (!settings) return '';
+  const styles = [];
+  const { 
+    include = Object.keys(STYLE_MAP),
+    exclude = [],
+    important = false,
+  } = options;
+
+  Object.entries(STYLE_MAP).forEach(([key, prop]) => {
+    if (!include.includes(key) || exclude.includes(key)) return;
+
+    let value;
+    if (key.includes('.')) {
+      const [parent, child] = key.split('.');
+      value = settings[parent]?.[child];
+    } else {
+      value = settings[key];
+    }
+
+    if (value === undefined || value === null || value === '' || value === 'transparent') return;
+
+    // Format specific values
+    let formattedValue = value;
+    if (key === 'backgroundImage' && !`${value}`.startsWith('url(')) {
+      formattedValue = `url('${value}')`;
+    } else if (typeof value === 'number' || /^\d+$/.test(value)) {
+       if (['fontSize', 'borderWidth', 'borderRadius', 'width', 'height', 'maxWidth'].includes(key) || key.startsWith('padding') || key.startsWith('margin')) {
+         formattedValue = `${value}px`;
+       }
+    }
+
+    styles.push(`${prop}:${formattedValue}${important ? ' !important' : ''};`);
+  });
+
+  return styles.join('');
+};
+
+// ============================================================================
 // STYLE EXTRACTION UTILITIES
 // ============================================================================
+
 
 const extractStyleValue = (styleText, propName) => {
   const style = `${styleText || ''}`;
@@ -32,7 +130,10 @@ const findClosestColor = (el, propName = 'background-color', maxDepth = 8) => {
   for (let i = 0; i < maxDepth && node; i++) {
     if (node.nodeType === Node.ELEMENT_NODE) {
       const color = extractColor(node, propName);
-      if (color) return color;
+      if (color && color !== 'transparent' && color !== 'rgba(0,0,0,0)' && color !== 'inherit') return color;
+      
+      // Also check for bgcolor attribute on table/tr/td
+      if (node.getAttribute?.('bgcolor')) return node.getAttribute('bgcolor');
     }
     node = node.parentElement;
   }
@@ -48,8 +149,11 @@ const normalizeDimensionValue = (value) => {
   const raw = `${value || ''}`.trim();
   if (!raw) return '';
   if (/^\d+(?:\.\d+)?$/.test(raw)) return `${raw}px`;
+  // If it's already a valid CSS value (px, %, em, etc), return as is
+  if (/^\d+(?:\.\d+)?(px|%|em|rem|vw|vh)$/i.test(raw)) return raw;
   return raw;
 };
+
 
 const parseBoxShorthand = (styleText, propName) => {
   const out = { top: 0, right: 0, bottom: 0, left: 0 };
@@ -157,10 +261,35 @@ const extractBackgroundSettings = (el) => {
 
 const findLikelyContentWidth = (root) => {
   if (!root) return '600px';
+
+  // 1. Try to find the most frequent width among tables that look like main containers
+  const tables = Array.from(root.querySelectorAll?.('table') || []);
+  const widthCounts = new Map();
+
+  tables.forEach(table => {
+    const w = table.getAttribute?.('width') || extractStyleValue(table.getAttribute?.('style') || '', 'width');
+    if (w && !w.endsWith('%')) {
+      const px = parseInt(w, 10);
+      if (px >= 320 && px <= 900) {
+        widthCounts.set(px, (widthCounts.get(px) || 0) + 1);
+      }
+    }
+  });
+
+  if (widthCounts.size > 0) {
+    const sorted = Array.from(widthCounts.entries()).sort((a, b) => {
+      if (b[1] !== a[1]) return b[1] - a[1];
+      return Math.abs(a[0] - 600) - Math.abs(b[0] - 600);
+    });
+    return `${sorted[0][0]}px`;
+  }
+
+  // 2. Fallback to style-based detection on other elements
   const rawCandidates = Array.from(root.querySelectorAll?.('*') || []).map((el) => {
     const style = el.getAttribute?.('style') || '';
-    return el.getAttribute?.('width') || extractStyleValue(style, 'max-width') || extractStyleValue(style, 'width') || '';
+    return extractStyleValue(style, 'max-width') || extractStyleValue(style, 'width') || '';
   });
+  
   const candidates = rawCandidates
     .map((value) => `${value || ''}`.trim())
     .filter(Boolean)
@@ -169,19 +298,25 @@ const findLikelyContentWidth = (root) => {
       const match = value.match(/(\d+(?:\.\d+)?)/);
       if (!match) return null;
       const px = Math.round(Number.parseFloat(match[1]));
-      return (px >= 320 && px <= 800) ? px : null;
+      return (px >= 320 && px <= 900) ? px : null;
     })
-    .filter((value) => Number.isFinite(value));
-  if (candidates.length === 0) return '600px';
+    .filter((value) => value !== null && Number.isFinite(value));
 
-  const counts = new Map();
-  candidates.forEach((px) => counts.set(px, (counts.get(px) || 0) + 1));
-  const best = Array.from(counts.entries()).sort((a, b) => {
-    if (b[1] !== a[1]) return b[1] - a[1];
-    return Math.abs(a[0] - 600) - Math.abs(b[0] - 600);
-  })[0]?.[0];
-  return `${best || 600}px`;
+  
+  if (candidates.length > 0) {
+    const counts = new Map();
+    candidates.forEach((px) => counts.set(px, (counts.get(px) || 0) + 1));
+    const sorted = Array.from(counts.entries()).sort((a, b) => {
+      if (b[1] !== a[1]) return b[1] - a[1];
+      return Math.abs(a[0] - 600) - Math.abs(b[0] - 600);
+    });
+    return `${sorted[0][0]}px`;
+  }
+  
+  return '600px';
 };
+
+
 
 const extractTemplateSettings = (body, referenceEl = null) => {
   const bodyStyle = body?.getAttribute?.('style') || '';
@@ -212,6 +347,7 @@ const extractTemplateSettings = (body, referenceEl = null) => {
   };
 };
 
+
 // Walk up DOM to collect inherited font styles (closest ancestor wins)
 const collectInheritedStyles = (el) => {
   if (!el) return {};
@@ -239,6 +375,16 @@ const isHiddenElement = (el) => {
 
 const isNoiseTable = (tableEl) => {
   if (!tableEl) return false;
+
+  // BYPASS: Never skip semantic sections
+  const name = (tableEl.getAttribute?.('name') || '').toLowerCase();
+  const id = (tableEl.id || '').toLowerCase();
+  const cls = (tableEl.className || '').toLowerCase();
+  if (name.includes('navbar') || name.includes('header') || name.includes('footer') || 
+      id.includes('logo') || cls.includes('logo') || name.includes('menu') || name.includes('blk_card')) {
+    return false;
+  }
+
   if (isHiddenElement(tableEl)) return true;
   // Tracking pixels / spacer tables: single cell with only a tiny image or nbsp
   const rows = getDirectTableRows(tableEl);
@@ -360,6 +506,7 @@ const createComponentSettings = (el, baseSettings = {}) => {
     listStyleType: 'disc',
     width: '',
     height: '',
+    maxWidth: '100%',
     boxSizing: 'border-box',
   };
   if (!el || !el.getAttribute) return { ...defaults, ...baseSettings };
@@ -371,11 +518,20 @@ const createComponentSettings = (el, baseSettings = {}) => {
   const margin = parseMargin(style);
   const borderStyles = extractBorderStyles(style);
   const bgSettings = extractBackgroundSettings(el);
+
+  // High fidelity background inheritance for semantic containers
+  if ((!bgSettings.backgroundColor || bgSettings.backgroundColor === 'transparent' || bgSettings.backgroundColor === 'rgba(0,0,0,0)') && 
+      ['div', 'span', 'table', 'td'].includes(el.tagName?.toLowerCase())) {
+    const parentBg = findClosestColor(el, 'background-color', 8);
+    if (parentBg) bgSettings.backgroundColor = parentBg;
+  }
+
   const align = extractAlign(el);
   const dims = extractDimensions(el);
 
   return {
     ...defaults,
+    originalTag: el.tagName?.toLowerCase() || '',
     ...inherited,
     ...directFont,
     padding,
@@ -388,11 +544,29 @@ const createComponentSettings = (el, baseSettings = {}) => {
   };
 };
 
+// Helper: check if element or its attributes match a semantic pattern
+const matchesSemanticPattern = (el, type, keywords) => {
+  if (!el || !el.getAttribute) return false;
+  const tag = (el.tagName || '').toLowerCase();
+  const id = (el.id || '').toLowerCase();
+  const cls = (el.className || '').toLowerCase();
+  const name = (el.getAttribute?.('name') || '').toLowerCase();
+  
+  // Standard Tag Matches
+  if (type === 'NAV' && tag === 'nav') return true;
+  if (type === 'HEADER' && tag === 'header') return true;
+  if (type === 'FOOTER' && tag === 'footer') return true;
+  if (type === 'SIDEBAR' && tag === 'aside') return true;
+
+  // Attribute Pattern Matches
+  return keywords.some((k) => id.includes(k) || cls.includes(k) || name.includes(k));
+};
+
 const extractComponentsFromElement = (node, components = []) => {
   if (!node) return;
 
   if (node.nodeType === Node.TEXT_NODE) {
-    const text = `${node.textContent || ''}`.replace(/\s+/g, ' ').trim();
+    const text = `${node.textContent || ''}`.trim();
     if (text && !isDecorativeSeparator(text)) {
       components.push({
         id: makeId(),
@@ -407,14 +581,80 @@ const extractComponentsFromElement = (node, components = []) => {
   if (node.nodeType !== Node.ELEMENT_NODE) return;
 
   const el = node;
-  const tag = `${el.tagName || ''}`.toLowerCase();
+  const tag = (el.tagName || '').toLowerCase();
 
   // Skip noise
-  if (['script', 'style', 'meta', 'link', 'head', 'br'].includes(tag)) return;
+  if (['script', 'style', 'meta', 'link', 'head'].includes(tag)) return;
+  if (tag === 'br') return;
 
   // Skip noise/divider tables
   if (tag === 'table') {
     if (isNoiseTable(el) || isDividerTable(el)) return;
+  }
+
+  // 1. Navbar / Menu Detection
+  if (matchesSemanticPattern(el, 'NAV', ['navbar', 'menu', 'links', 'nav-links'])) {
+    const allLinks = Array.from(el.querySelectorAll('a'))
+      .map((link) => `${link.textContent || ''}`.replace(/\s+/g, ' ').trim())
+      .filter((text) => text && !isDecorativeSeparator(text));
+    if (allLinks.length >= 2) {
+      components.push({ id: makeId(), type: COMPONENT_TYPES.NAV, content: allLinks.join('\n'), settings: createComponentSettings(el) });
+      return;
+    }
+  }
+
+  // 2. Logo Detection
+  if (matchesSemanticPattern(el, 'IMAGE', ['logo', 'brand'])) {
+    const img = el.tagName?.toLowerCase() === 'img' ? el : el.querySelector('img');
+    if (img) {
+      const src = img.getAttribute('src') || '';
+      if (src) {
+        components.push({ 
+          id: makeId(), 
+          type: COMPONENT_TYPES.IMAGE, 
+          imageUrl: src, 
+          content: img.getAttribute('alt') || 'Logo', 
+          settings: createComponentSettings(img, { width: img.getAttribute('width') || 'auto', textAlign: 'center' }) 
+        });
+        return;
+      }
+    }
+  }
+
+  // 3. Header Detection
+  if (matchesSemanticPattern(el, 'HEADER', ['header', 'top', 'branding'])) {
+    const text = (el.innerText || el.textContent || '').trim();
+    if (text && (el.children?.length || 0) <= 1) {
+      components.push({ id: makeId(), type: COMPONENT_TYPES.HEADER, content: text, settings: createComponentSettings(el) });
+      return;
+    }
+  }
+
+  // 4. Footer Detection
+  if (matchesSemanticPattern(el, 'FOOTER', ['footer', 'bottom', 'legal', 'unsubscribe', 'disclaimer'])) {
+    const text = (el.innerText || el.textContent || '').trim();
+    if (text && (el.children?.length || 0) <= 1) {
+      components.push({ id: makeId(), type: COMPONENT_TYPES.FOOTER, content: text, settings: createComponentSettings(el) });
+      return;
+    }
+  }
+
+  // 5. Sidebar Detection
+  if (matchesSemanticPattern(el, 'SIDEBAR', ['sidebar', 'aside', 'column-side'])) {
+    const text = (el.innerText || el.textContent || '').trim();
+    if (text && (el.children?.length || 0) <= 1) {
+      components.push({ id: makeId(), type: COMPONENT_TYPES.SIDEBAR, content: text, settings: createComponentSettings(el) });
+      return;
+    }
+  }
+
+  // 6. Banner / Hero Detection
+  if (matchesSemanticPattern(el, 'BANNER', ['banner', 'hero', 'card', 'intro'])) {
+    const text = (el.innerText || el.textContent || '').trim();
+    if (text && (el.children?.length || 0) <= 1) {
+      components.push({ id: makeId(), type: COMPONENT_TYPES.BANNER, content: text, settings: createComponentSettings(el) });
+      return;
+    }
   }
 
   const directLinkChildren = Array.from(el.children || []).filter((child) => `${child.tagName || ''}`.toLowerCase() === 'a');
@@ -552,7 +792,7 @@ const extractComponentsFromElement = (node, components = []) => {
     return pushed;
   };
 
-  // Styled inline containers — extract as styled paragraph if leaf text
+  // Styled inline containers — extract as styled paragraph/span if leaf text
   if (['span', 'strong', 'b', 'em', 'i', 'u', 'font', 'center'].includes(tag)) {
     if (isLeafTextElement(el)) {
       // Check for <br> inside — split segments
@@ -562,13 +802,14 @@ const extractComponentsFromElement = (node, components = []) => {
       }
       const text = `${el.textContent || ''}`.replace(/\s+/g, ' ').trim();
       if (text && !isDecorativeSeparator(text)) {
-        components.push({ id: makeId(), type: COMPONENT_TYPES.PARAGRAPH, content: text, settings: createComponentSettings(el) });
+        const type = tag === 'span' ? COMPONENT_TYPES.SPAN : COMPONENT_TYPES.PARAGRAPH;
+        components.push({ id: makeId(), type, content: text, settings: createComponentSettings(el) });
         return;
       }
     }
   }
 
-  // Leaf-text divs — treat as paragraph
+  // Leaf-text divs — treat as DIV component
   if (tag === 'div' && isLeafTextElement(el)) {
     const hasBr = Array.from(el.childNodes).some((c) => c.nodeType === Node.ELEMENT_NODE && `${c.tagName || ''}`.toLowerCase() === 'br');
     if (hasBr) {
@@ -576,8 +817,22 @@ const extractComponentsFromElement = (node, components = []) => {
     }
     const text = `${el.textContent || ''}`.replace(/\s+/g, ' ').trim();
     if (text && !isDecorativeSeparator(text)) {
-      components.push({ id: makeId(), type: COMPONENT_TYPES.PARAGRAPH, content: text, settings: createComponentSettings(el) });
+      components.push({ id: makeId(), type: COMPONENT_TYPES.DIV, content: text, settings: createComponentSettings(el) });
       return;
+    }
+  }
+
+  // Fallback for complex structural elements — preserve as HTML component if they have meaningful content
+  if (['div', 'section', 'article', 'table'].includes(tag) && !isLeafTextElement(el)) {
+    const text = (el.innerText || el.textContent || '').trim();
+    const hasImg = !!el.querySelector('img');
+    if ((text.length > 20 || hasImg) && !el.querySelector('table')) { // Don't swallow nested table structures yet
+       // Only if it's not a generic container we're already recursing into
+       const meaningfulChildren = Array.from(el.children).filter(c => !['script', 'style', 'br'].includes(c.tagName.toLowerCase()));
+       if (meaningfulChildren.length > 0 && meaningfulChildren.length <= 3) {
+         components.push({ id: makeId(), type: COMPONENT_TYPES.HTML, content: el.innerHTML, settings: createComponentSettings(el) });
+         return;
+       }
     }
   }
 
@@ -635,7 +890,14 @@ const createColumnFromCell = (td, index, size, rowIndex, now) => {
   const deduped = deduplicateComponents(components);
 
   const style = td.getAttribute('style') || '';
-  const bg = extractColor(td, 'background-color');
+  let bg = extractColor(td, 'background-color');
+  if (!bg || bg === 'transparent') {
+    // If td is transparent, look for a background in its only child table (layout pattern)
+    const childTable = td.querySelector('table');
+    if (childTable) bg = extractColor(childTable, 'background-color') || childTable.getAttribute?.('bgcolor');
+  }
+  if (!bg || bg === 'transparent') bg = findClosestColor(td, 'background-color', 3);
+
   const padding = parsePadding(style);
   const margin = parseMargin(style);
   const align = extractAlign(td);
@@ -679,7 +941,18 @@ const computeColumnSizes = (cells) => {
   const rawSizes = activeCells.map((c) => {
     const wAttr = c.getAttribute?.('width') || '';
     const wStyle = extractStyleValue(c.getAttribute?.('style') || '', 'width');
-    const raw = wAttr || wStyle;
+    let raw = wAttr || wStyle;
+    
+    if (!raw) {
+      // Look deeper for any dimensioned content
+      const innerTable = c.querySelector('table[width]');
+      if (innerTable) raw = innerTable.getAttribute('width');
+      else {
+        const innerImg = c.querySelector('img[width]');
+        if (innerImg) raw = innerImg.getAttribute('width');
+      }
+    }
+
     const frac = parseWidthToFraction(raw);
     if (typeof frac === 'number' && frac > 0 && frac <= 1) return Math.max(1, Math.round(frac * 12));
     if (typeof frac === 'number' && frac > 1) return frac; // px value
@@ -754,11 +1027,15 @@ const findMultiColTableRows = (td) => {
 
 // Get bg color for a row: check tr, first td, nested bmeHolder tds, then walk up
 const getRowBg = (tr, tds) => {
+  // 1. Direct row background
   let bg = extractColor(tr, 'background-color');
   if (bg) return bg;
+
+  // 2. Direct cell background
   if (tds.length > 0) {
     bg = extractColor(tds[0], 'background-color');
     if (bg) return bg;
+    
     // Check nested td elements (bmeHolder pattern)
     const nestedTds = Array.from(tds[0].querySelectorAll?.('td') || []);
     for (const ntd of nestedTds) {
@@ -766,8 +1043,21 @@ const getRowBg = (tr, tds) => {
       if (bg) return bg;
     }
   }
-  bg = findClosestColor(tr, 'background-color');
-  return bg || '';
+
+  // 3. Search UP for nearest container background (table or div)
+  bg = findClosestColor(tr, 'background-color', 15);
+  if (bg) return bg;
+
+  // 4. Search DOWN into cells for any dominant background if row is transparent
+  if (tds.length === 1) {
+    const tableInside = tds[0].querySelector('table');
+    if (tableInside) {
+      bg = extractColor(tableInside, 'background-color');
+      if (bg) return bg;
+    }
+  }
+
+  return '';
 };
 
 // Get background image for a row
@@ -1171,3 +1461,64 @@ export const parseHtmlToSections = (htmlText) => {
     return null;
   }
 };
+
+export const generateHtmlFromSections = (sections, templateSettings) => {
+  const containerWidth = templateSettings?.containerWidth || '600px';
+  const bodyStyles = generateCssFromSettings(templateSettings, { 
+    include: ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'textColor', 'backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundPosition', 'backgroundRepeat'],
+  });
+
+  const renderComponent = (comp) => {
+    const tag = comp.settings?.originalTag || 'div';
+    const styles = generateCssFromSettings(comp.settings);
+    // Add MSO fallback for line height if specified
+    const msoStyles = comp.settings?.lineHeight ? `mso-line-height-rule:exactly;` : '';
+    
+    if (comp.type === COMPONENT_TYPES.IMAGE) {
+      return `<img src="${comp.imageUrl || ''}" alt="${comp.content || ''}" style="display:block;border:0;${styles}" />`;
+    }
+    
+    if (comp.type === COMPONENT_TYPES.HTML) {
+      return comp.content || '';
+    }
+
+    return `<${tag} style="${msoStyles}${styles}">${comp.content || ''}</${tag}>`;
+  };
+
+  const rowsHtml = (sections || []).flatMap(section => 
+    (section.rows || []).map(row => {
+      const rowStyles = generateCssFromSettings(row.settings);
+      const colsHtml = (row.columns || []).map(col => {
+        const colStyles = generateCssFromSettings(col.settings);
+        const colWidth = `${Math.round((col.size / 12) * 100)}%`;
+        const componentsHtml = (col.components || []).map(renderComponent).join('');
+        return `<td width="${colWidth}" style="vertical-align:top;${colStyles}">${componentsHtml}</td>`;
+      }).join('');
+      
+      return `<tr><td style="${rowStyles}"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>${colsHtml}</tr></table></td></tr>`;
+    })
+  ).join('');
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { margin: 0; padding: 0; width: 100% !important; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; -ms-interpolation-mode: bicubic; }
+  </style>
+</head>
+<body style="margin:0;padding:0;${bodyStyles}">
+  <center>
+    <table role="presentation" width="${containerWidth}" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto;width:100%;max-width:${containerWidth}; background-color:${templateSettings?.containerBackgroundColor || 'transparent'};">
+      ${rowsHtml}
+    </table>
+  </center>
+</body>
+</html>`;
+};
+
+

@@ -23,4 +23,11 @@ export const COMPONENT_TYPES = {
   ICON: 'Icon',
   HTML: 'Html',
   MENU: 'Menu',
+  DIV: 'Div',
+  SPAN: 'Span',
+  NAV: 'Nav',
+  HEADER: 'Header',
+  FOOTER: 'Footer',
+  SIDEBAR: 'Sidebar',
+  BANNER: 'Banner',
 };
