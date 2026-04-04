@@ -279,17 +279,27 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
           </Box>
         );
       case COMPONENT_TYPES.IMAGE:
+        // For images, don't apply padding that would reduce the image size
+        const imageStyles = {
+          textAlign: component.settings?.textAlign || 'center',
+          backgroundColor: componentStyles.backgroundColor,
+          margin: 0,
+          padding: 0,
+        };
         return (
-          <Box onClick={handleSelect} style={{ width: '100%', textAlign: component.settings?.textAlign || 'center', ...componentStyles }}>
-            <Image
+          <Box onClick={handleSelect} style={{ width: '100%', ...imageStyles }}>
+            <img
               src={component.imageUrl || 'https://dummyimage.com/100x50/cccccc/000000.png'}
               alt="Image"
-              maxW="100%"
               style={{
                 width: component.settings?.width || 'auto',
                 height: component.settings?.height || 'auto',
+                maxWidth: '100%',
                 display: 'inline-block',
                 border: 'none',
+                margin: 0,
+                padding: 0,
+                boxSizing: 'border-box',
               }}
             />
             {isSelected && (

@@ -116,12 +116,42 @@ const extractStyleValue = (styleText, propName) => {
 
 const extractColor = (el, propName = 'background-color') => {
   if (!el || !el.getAttribute) return '';
+  
+  // Check inline style first
   const styleVal = extractStyleValue(el.getAttribute('style') || '', propName);
   if (styleVal && styleVal !== 'transparent' && styleVal !== 'rgba(0, 0, 0, 0)') return styleVal;
+  
+  // For background-color, check bgcolor attribute
   if (propName === 'background-color') {
     const bgAttr = el.getAttribute('bgcolor');
     if (bgAttr) return `${bgAttr}`.trim();
   }
+  
+  return '';
+};
+
+// Enhanced color extraction that checks nested and parent elements
+const extractColorDeep = (el, propName = 'background-color', checkNested = true) => {
+  if (!el) return '';
+  
+  // Check the element itself first
+  const directColor = extractColor(el, propName);
+  if (directColor) return directColor;
+  
+  // Check nested elements (td, tr, div, span, table) for background-color
+  if (checkNested && propName === 'background-color') {
+    const tags = ['td', 'tr', 'div', 'span', 'table', 'section', 'article'];
+    for (const tag of tags) {
+      const nested = el.querySelector?.(tag);
+      if (nested) {
+        const nestedColor = extractColor(nested, propName);
+        if (nestedColor && nestedColor !== '#ffffff' && nestedColor !== 'transparent' && nestedColor !== 'rgba(0, 0, 0, 0)') {
+          return nestedColor;
+        }
+      }
+    }
+  }
+  
   return '';
 };
 
@@ -322,12 +352,38 @@ const extractTemplateSettings = (body, referenceEl = null) => {
   const bodyStyle = body?.getAttribute?.('style') || '';
   const bodyFont = extractFontStyles(body);
   const refFont = extractFontStyles(referenceEl);
-  const bodyBg = extractColor(body, 'background-color') || findClosestColor(referenceEl || body, 'background-color', 4) || '#ffffff';
+  const bodyBg = extractColorDeep(body, 'background-color', true) || findClosestColor(referenceEl || body, 'background-color', 4) || '#ffffff';
   const bodyBgImage = extractBackgroundImage(bodyStyle) || extractBackgroundImage(referenceEl?.getAttribute?.('style') || '');
   const bodyBgSize = extractStyleValue(bodyStyle, 'background-size') || extractStyleValue(referenceEl?.getAttribute?.('style') || '', 'background-size') || '';
   const bodyBgPosition = extractStyleValue(bodyStyle, 'background-position') || extractStyleValue(referenceEl?.getAttribute?.('style') || '', 'background-position') || '';
   const bodyBgRepeat = extractStyleValue(bodyStyle, 'background-repeat') || extractStyleValue(referenceEl?.getAttribute?.('style') || '', 'background-repeat') || '';
-  const refBg = extractColor(referenceEl, 'background-color');
+  const refBg = extractColorDeep(referenceEl, 'background-color', true);
+  
+  // Get container width from reference element or find it from nested tables
+  let containerWidth = findLikelyContentWidth(referenceEl || body);
+  
+  if (!containerWidth || containerWidth === 'auto') {
+    // Try to get width from the main table
+    const mainTable = referenceEl?.querySelector?.('table[width]') || body?.querySelector?.('table[width]');
+    if (mainTable) {
+      const w = mainTable.getAttribute('width');
+      if (w) {
+        containerWidth = w.endsWith('px') ? w : (w.endsWith('%') ? w : `${w}px`);
+      }
+    }
+  }
+  
+  // Look for any table with width in the body
+  if (!containerWidth || containerWidth === 'auto') {
+    const allTables = body?.querySelectorAll?.('table[width]') || [];
+    for (const table of allTables) {
+      const w = table.getAttribute('width');
+      if (w && w !== '100%' && w !== '100') {
+        containerWidth = w.endsWith('px') ? w : `${w}px`;
+        break;
+      }
+    }
+  }
 
   return {
     fontFamily: bodyFont.fontFamily || refFont.fontFamily || 'Arial, sans-serif',
@@ -341,7 +397,7 @@ const extractTemplateSettings = (body, referenceEl = null) => {
     bodyBackgroundPosition: bodyBgPosition || 'center',
     bodyBackgroundRepeat: bodyBgRepeat || 'no-repeat',
     containerBackgroundColor: (refBg && refBg !== bodyBg) ? refBg : 'transparent',
-    containerWidth: findLikelyContentWidth(referenceEl || body),
+    containerWidth: containerWidth || '600px',
     containerMinHeight: 'auto',
     containerPadding: '0px',
   };
@@ -384,6 +440,9 @@ const isNoiseTable = (tableEl) => {
       id.includes('logo') || cls.includes('logo') || name.includes('menu') || name.includes('blk_card')) {
     return false;
   }
+
+  // BYPASS: Don't skip footer content tables (even if named blk_footer)
+  if (name === 'blk_footer') return false;
 
   if (isHiddenElement(tableEl)) return true;
   // Tracking pixels / spacer tables: single cell with only a tiny image or nbsp
@@ -598,13 +657,19 @@ const extractComponentsFromElement = (node, components = []) => {
       .map((link) => `${link.textContent || ''}`.replace(/\s+/g, ' ').trim())
       .filter((text) => text && !isDecorativeSeparator(text));
     if (allLinks.length >= 2) {
-      components.push({ id: makeId(), type: COMPONENT_TYPES.NAV, content: allLinks.join('\n'), settings: createComponentSettings(el) });
+      components.push({ 
+        id: makeId(), 
+        type: COMPONENT_TYPES.MENU, 
+        content: allLinks.join('\n'), 
+        settings: createComponentSettings(el, { textAlign: 'center' }) 
+      });
       return;
     }
   }
 
   // 2. Logo Detection
-  if (matchesSemanticPattern(el, 'IMAGE', ['logo', 'brand'])) {
+  if (matchesSemanticPattern(el, 'IMAGE', ['logo', 'brand']) || 
+      (el.tagName?.toLowerCase() === 'img' && el.closest('[name*="header"], [name*="Header"]'))) {
     const img = el.tagName?.toLowerCase() === 'img' ? el : el.querySelector('img');
     if (img) {
       const src = img.getAttribute('src') || '';
@@ -614,7 +679,11 @@ const extractComponentsFromElement = (node, components = []) => {
           type: COMPONENT_TYPES.IMAGE, 
           imageUrl: src, 
           content: img.getAttribute('alt') || 'Logo', 
-          settings: createComponentSettings(img, { width: img.getAttribute('width') || 'auto', textAlign: 'center' }) 
+          settings: createComponentSettings(img, { 
+            width: img.getAttribute('width') || 'auto', 
+            textAlign: 'center',
+            padding: { top: 0, right: 0, bottom: 10, left: 0 }
+          }) 
         });
         return;
       }
@@ -890,11 +959,11 @@ const createColumnFromCell = (td, index, size, rowIndex, now) => {
   const deduped = deduplicateComponents(components);
 
   const style = td.getAttribute('style') || '';
-  let bg = extractColor(td, 'background-color');
+  let bg = extractColorDeep(td, 'background-color', true);
   if (!bg || bg === 'transparent') {
     // If td is transparent, look for a background in its only child table (layout pattern)
     const childTable = td.querySelector('table');
-    if (childTable) bg = extractColor(childTable, 'background-color') || childTable.getAttribute?.('bgcolor');
+    if (childTable) bg = extractColorDeep(childTable, 'background-color', true) || childTable.getAttribute?.('bgcolor');
   }
   if (!bg || bg === 'transparent') bg = findClosestColor(td, 'background-color', 3);
 
@@ -1025,48 +1094,69 @@ const findMultiColTableRows = (td) => {
   return results;
 };
 
-// Get bg color for a row: check tr, first td, nested bmeHolder tds, then walk up
+// Get bg color for a row: check tr, first td, deeply nested elements, then walk up
 const getRowBg = (tr, tds) => {
-  // 1. Direct row background
-  let bg = extractColor(tr, 'background-color');
-  if (bg) return bg;
-
-  // 2. Direct cell background
+  // Check the tr itself first
+  let bg = extractColorDeep(tr, 'background-color', true);
+  if (bg && bg !== 'transparent' && bg !== 'rgba(0,0,0,0)') return bg;
+  
   if (tds.length > 0) {
-    bg = extractColor(tds[0], 'background-color');
-    if (bg) return bg;
+    // Check the first td
+    bg = extractColorDeep(tds[0], 'background-color', true);
+    if (bg && bg !== 'transparent' && bg !== 'rgba(0,0,0,0)') return bg;
     
-    // Check nested td elements (bmeHolder pattern)
+    // Check for bgcolor attribute directly on td
+    const tdBgAttr = tds[0].getAttribute('bgcolor');
+    if (tdBgAttr) return tdBgAttr;
+    
+    // Check ALL nested tables at every level for bgcolor (not just immediate children)
+    // This handles cases where the color is 2+ levels deep
+    const allNestedTables = Array.from(tds[0].querySelectorAll?.('table') || []);
+    for (const table of allNestedTables) {
+      // Check table's own bgcolor first
+      const tableBg = table.getAttribute('bgcolor');
+      const tableBgStyle = extractColor(table, 'background-color');
+      if (tableBg) return tableBg;
+      if (tableBgStyle && tableBgStyle !== 'transparent' && tableBgStyle !== 'rgba(0,0,0,0)') return tableBgStyle;
+      
+      // Check table's cells
+      const tableTds = Array.from(table.querySelectorAll?.('td') || []);
+      for (const td of tableTds) {
+        const tdBg = td.getAttribute('bgcolor');
+        const tdBgStyle = extractColor(td, 'background-color');
+        if (tdBg) return tdBg;
+        if (tdBgStyle && tdBgStyle !== 'transparent' && tdBgStyle !== 'rgba(0,0,0,0)') return tdBgStyle;
+      }
+    }
+    
+    // Check nested td elements at all levels
     const nestedTds = Array.from(tds[0].querySelectorAll?.('td') || []);
     for (const ntd of nestedTds) {
       bg = extractColor(ntd, 'background-color');
-      if (bg) return bg;
+      const nestedBgAttr = ntd.getAttribute('bgcolor');
+      if (bg && bg !== 'transparent' && bg !== 'rgba(0,0,0,0)') return bg;
+      if (nestedBgAttr) return nestedBgAttr;
     }
   }
-
-  // 3. Search UP for nearest container background (table or div)
-  bg = findClosestColor(tr, 'background-color', 15);
-  if (bg) return bg;
-
-  // 4. Search DOWN into cells for any dominant background if row is transparent
-  if (tds.length === 1) {
-    const tableInside = tds[0].querySelector('table');
-    if (tableInside) {
-      bg = extractColor(tableInside, 'background-color');
-      if (bg) return bg;
-    }
-  }
-
-  return '';
+  
+  // Last resort: walk up DOM
+  bg = findClosestColor(tr, 'background-color');
+  return bg || '';
 };
 
-// Get background image for a row
+// Get background image for a row - check nested elements too
 const getRowBgImage = (tr, tds) => {
   let bgImg = extractBackgroundImage(tr.getAttribute?.('style') || '');
   if (bgImg) return bgImg;
   if (tds.length > 0) {
     bgImg = extractBackgroundImage(tds[0].getAttribute?.('style') || '');
     if (bgImg) return bgImg;
+    // Check nested elements for background images
+    const nestedElements = Array.from(tds[0].querySelectorAll?.('[style*="background-image"]') || []);
+    for (const nested of nestedElements) {
+      bgImg = extractBackgroundImage(nested.getAttribute?.('style') || '');
+      if (bgImg) return bgImg;
+    }
   }
   return '';
 };
@@ -1240,7 +1330,7 @@ const processContentBlocks = (sectionTd, rowIndexBase, now, sectionBg = '', sect
 const extractBgFromElement = (el) => {
   if (!el || !el.getAttribute) return { bg: '', bgImage: '' };
   const style = el.getAttribute('style') || '';
-  const bg = extractColor(el, 'background-color') || '';
+  const bg = extractColorDeep(el, 'background-color', true) || '';
   const bgImage = extractBackgroundImage(style);
   return { bg, bgImage };
 };
@@ -1380,7 +1470,23 @@ export const parseHtmlToSections = (htmlText) => {
     if (mainTable) {
       const mainRows = getDirectTableRows(mainTable);
       const allSectionRows = [];
-
+      
+      // Extract navbar and footer as separate sections if they exist
+      const navbarTable = body?.querySelector?.('table[name="blk_navbar"]');
+      const footerTable = body?.querySelector?.('table[name="blk_footer"]');
+      
+      if (navbarTable && !isNoiseTable(navbarTable)) {
+        const navbarRows = getDirectTableRows(navbarTable);
+        navbarRows.forEach((tr, idx) => {
+          const tds = Array.from(tr.cells || []);
+          if (tds.length > 0) {
+            const sectionBg = getRowBg(tr, tds);
+            const contentRows = processContentBlocks(tds[0], -1, Date.now(), sectionBg, '');
+            allSectionRows.push(...contentRows);
+          }
+        });
+      }
+      
       mainRows.forEach((tr, sectionIndex) => {
         const tds = Array.from(tr.cells || []);
         if (tds.length === 0) return;
@@ -1428,8 +1534,22 @@ export const parseHtmlToSections = (htmlText) => {
         if (hasComponents) return true;
         const bg = r.settings?.backgroundColor;
         const bgImg = r.settings?.backgroundImage;
-        return !!(bgImg || (bg && bg !== '#ffffff' && bg !== 'transparent'));
+        // Keep rows with any background (including white) or background image
+        return !!(bgImg || bg);
       });
+      
+      // Add footer as last section if it exists
+      if (footerTable && !isNoiseTable(footerTable)) {
+        const footerRows = getDirectTableRows(footerTable);
+        footerRows.forEach((tr, idx) => {
+          const tds = Array.from(tr.cells || []);
+          if (tds.length > 0) {
+            const sectionBg = getRowBg(tr, tds);
+            const contentRows = processContentBlocks(tds[0], 999, Date.now(), sectionBg, '');
+            compactedRows.push(...contentRows);
+          }
+        });
+      }
 
       return {
         sections: [{ id: now, rows: compactedRows }],

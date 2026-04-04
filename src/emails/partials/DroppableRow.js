@@ -31,7 +31,6 @@ const moveRow = (dragIndex, hoverIndex, setComponents) => {
 
 // Droppable Row Component
 const DroppableRow = ({ row, setComponents, parentId, index, moveRow, updateSections, syncEditorToHtml, onSelect, selectedTarget }) => {
-  console.log('DroppableRow received syncEditorToHtml:', typeof syncEditorToHtml);
 
   const [, drag] = useDrag({
     type: 'ROW',

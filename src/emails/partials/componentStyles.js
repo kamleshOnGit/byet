@@ -4,7 +4,7 @@ export const sectionStyle = {
   borderRadius: '8px',
   padding: '16px',
   marginBottom: '16px',
-  backgroundColor: 'rgba(250, 250, 250, 0.3)',
+  backgroundColor: 'transparent', // Let template backgrounds show through
   minHeight: '60px',
 };
 
@@ -13,7 +13,7 @@ export const rowStyle = {
   borderRadius: '4px',
   padding: '12px',
   marginBottom: '12px',
-  backgroundColor: 'rgba(255, 255, 255, 0.5)',
+  backgroundColor: 'transparent', // Let template backgrounds show through
   display: 'flex',
   flexWrap: 'nowrap',
   justifyContent: 'flex-start',
@@ -31,7 +31,7 @@ export const columnParentStyle = (colSpan) => ({
   margin: '4px',
   padding: '8px',
   minHeight: '40px',
-  backgroundColor: 'rgba(247, 250, 252, 0.4)',
+  backgroundColor: 'transparent', // Let template backgrounds show through
   boxSizing: 'border-box',
   overflow: 'visible',
 });
