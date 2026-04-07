@@ -1599,7 +1599,7 @@ export const generateHtmlFromSections = (sections, templateSettings) => {
     }
     
     if (comp.type === COMPONENT_TYPES.HTML) {
-      return comp.content || '';
+      return comp.htmlContent || comp.content || '';
     }
 
     return `<${tag} style="${msoStyles}${styles}">${comp.content || ''}</${tag}>`;

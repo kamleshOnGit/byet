@@ -3,10 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { Box, Button, Text, VStack } from '@chakra-ui/react';
 import { AddIcon, EditIcon } from '@chakra-ui/icons';
 import { parseHtmlToSections } from './utils/htmlParser';
+import { htmlToIr } from './import/htmlToIr';
+import { irToSections } from './ir/irToSections';
 
 const EmailList = () => {
   const navigate = useNavigate();
   const fileRef = useRef(null);
+
+  const USE_IR_IMPORT = true;
 
   const handleCreate = () => {
     navigate('/create');
@@ -22,15 +26,24 @@ const EmailList = () => {
 
     try {
       const text = await file.text();
-      const parsedTemplate = parseHtmlToSections(text);
-      if (!parsedTemplate) return;
+      let importedSections;
+      let importedTemplateSettings;
 
-      const importedSections = Array.isArray(parsedTemplate)
-        ? parsedTemplate
-        : parsedTemplate.sections;
-      const importedTemplateSettings = Array.isArray(parsedTemplate)
-        ? null
-        : parsedTemplate.templateSettings;
+      if (USE_IR_IMPORT) {
+        const ir = htmlToIr(text);
+        importedSections = irToSections(ir);
+        importedTemplateSettings = null;
+      } else {
+        const parsedTemplate = parseHtmlToSections(text);
+        if (!parsedTemplate) return;
+        importedSections = Array.isArray(parsedTemplate)
+          ? parsedTemplate
+          : parsedTemplate.sections;
+        importedTemplateSettings = Array.isArray(parsedTemplate)
+          ? null
+          : parsedTemplate.templateSettings;
+      }
+
       if (!importedSections) return;
 
       navigate('/create', {

@@ -91,6 +91,11 @@ const initialSections = () => [
   },
 ];
 
+const safeNumber = (value, fallback) => {
+  const n = Number.parseInt(`${value}`.replace(/[^0-9]/g, ''), 10);
+  return Number.isFinite(n) ? n : fallback;
+};
+
 const locateTarget = (sections, target) => {
   if (!target) return null;
   const { kind, id } = target;
@@ -721,9 +726,12 @@ const CreateTemplate = () => {
     padding: '24px',
   };
 
+  const containerWidthPxForEditor = safeNumber(templateSettings.containerWidth, 600);
+  const editorCanvasMaxWidth = `${Math.min(containerWidthPxForEditor + 320, 1200)}px`;
+
   const editorContainerStyle = {
     width: '100%',
-    maxWidth: normalizeEditorCssValue(templateSettings.containerWidth, '600px'),
+    maxWidth: editorCanvasMaxWidth,
     minHeight: templateSettings.containerMinHeight && templateSettings.containerMinHeight !== 'auto'
       ? templateSettings.containerMinHeight
       : undefined,
@@ -733,6 +741,7 @@ const CreateTemplate = () => {
       : 'transparent',
     margin: '0 auto',
     boxSizing: 'border-box',
+    overflowX: 'hidden',
   };
 
   return (
@@ -741,7 +750,7 @@ const CreateTemplate = () => {
         <Box flex="1" display="flex" overflow="hidden">
           {/* Left: Email Preview Area */}
           {isEditorView ? (
-            <Box flex="3" p={4} bg="gray.50" overflowY="auto"> {/* Increased flex value to make the email preview area wider */}
+            <Box flex="5" p={4} bg="gray.50" overflowY="auto">
               <Heading size="lg" mb={4}>
                 Editor View
               </Heading>
@@ -768,7 +777,7 @@ const CreateTemplate = () => {
               />
             </Box>
           ) : isBrowserView ? (
-            <Box flex="3" p={4} bg="gray.200" borderLeftWidth="1px" overflow="hidden">
+            <Box flex="5" p={4} bg="gray.200" borderLeftWidth="1px" overflow="hidden">
               <Heading size="lg" mb={4}>
                 Browser View
               </Heading>
@@ -779,12 +788,11 @@ const CreateTemplate = () => {
                   title="email-preview"
                   srcDoc={htmlContent}
                   style={{ width: '100%', height: '100%', border: 'none' }}
-                  sandbox="allow-same-origin"
                 />
               </Box>
             </Box>
           ) : (
-            <Box flex="3" p={4} bg="gray.200" borderLeftWidth="1px" overflowY="auto">
+            <Box flex="3" p={4} bg="gray.100" overflow="hidden">
               <Heading size="lg" mb={4}>
                 Code Preview
               </Heading>

@@ -5,7 +5,10 @@ import { useDrag } from 'react-dnd';
 import { COMPONENT_TYPES } from './componentTypes';
 
 // Draggable Component
-const DraggableComponent = ({ type }) => {
+const DraggableComponent = ({ definition }) => {
+  const type = definition?.type;
+  const title = definition?.title || '';
+
   const [{ isDragging }, drag] = useDrag(() => ({
     type,
     item: { type },
@@ -149,7 +152,7 @@ const DraggableComponent = ({ type }) => {
       cursor="grab"
       opacity={isDragging ? 0.5 : 1}
       _hover={{ boxShadow: "md", transform: "translateY(-2px)" }}
-      title={getTitle()} // Added title for hover text
+      title={title || getTitle()} // Added title for hover text
       w="100%" // Responsive width
       h="60px" // Set fixed height
       display="flex"

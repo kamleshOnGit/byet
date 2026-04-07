@@ -415,7 +415,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
         return (
           <Box onClick={handleSelect} p={4} border="1px dashed" borderColor="orange.300" borderRadius="md" style={componentStyles}>
             <Box dangerouslySetInnerHTML={{ __html: component.htmlContent || '<div>Custom HTML content</div>' }} />
-            {isSelected && (
+            {isSelected && !component.readOnly && (
               <textarea
                 placeholder="HTML content"
                 value={component.htmlContent || '<div>Custom HTML content</div>'}
