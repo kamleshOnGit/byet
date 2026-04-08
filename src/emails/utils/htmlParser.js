@@ -289,6 +289,105 @@ const extractBackgroundSettings = (el) => {
   };
 };
 
+const hasMeaningfulTextContent = (el) => {
+  if (!el) return false;
+  const text = `${el.textContent || ''}`.replace(/\s+/g, ' ').trim();
+  return text.length > 0 && !isDecorativeSeparator(text);
+};
+
+const hasMeaningfulInlineStyle = (el) => {
+  if (!el?.getAttribute) return false;
+  const style = el.getAttribute('style') || '';
+  if (!style.trim()) return false;
+  return !!(
+    extractStyleValue(style, 'background') ||
+    extractStyleValue(style, 'background-color') ||
+    extractStyleValue(style, 'background-image') ||
+    extractStyleValue(style, 'color') ||
+    extractStyleValue(style, 'font-size') ||
+    extractStyleValue(style, 'font-weight') ||
+    extractStyleValue(style, 'font-family') ||
+    extractStyleValue(style, 'line-height') ||
+    extractStyleValue(style, 'text-align') ||
+    extractStyleValue(style, 'padding') ||
+    extractStyleValue(style, 'padding-top') ||
+    extractStyleValue(style, 'padding-right') ||
+    extractStyleValue(style, 'padding-bottom') ||
+    extractStyleValue(style, 'padding-left') ||
+    extractStyleValue(style, 'margin') ||
+    extractStyleValue(style, 'border') ||
+    extractStyleValue(style, 'border-radius') ||
+    extractStyleValue(style, 'width') ||
+    extractStyleValue(style, 'height')
+  );
+};
+
+const getElementContentSignature = (el) => {
+  const signature = {
+    hasText: false,
+    hasImage: false,
+    hasLink: false,
+    hasButtonLike: false,
+    hasInlineWrapper: false,
+    hasBlockWrapper: false,
+    hasNestedTable: false,
+    hasStyledNode: false,
+    meaningfulNodeCount: 0,
+    tags: new Set(),
+  };
+
+  if (!el) return signature;
+
+  const nodes = [el, ...Array.from(el.querySelectorAll?.('*') || [])];
+  nodes.forEach((node) => {
+    const tag = `${node.tagName || ''}`.toLowerCase();
+    if (!tag) return;
+    signature.tags.add(tag);
+
+    if (tag === 'table' && node !== el) signature.hasNestedTable = true;
+    if (tag === 'img') signature.hasImage = true;
+    if (tag === 'a') {
+      signature.hasLink = true;
+      const bg = extractColor(node, 'background-color') || extractColor(node, 'bgcolor');
+      const hasPadding = !!extractStyleValue(node.getAttribute?.('style') || '', 'padding');
+      if (bg || hasPadding) signature.hasButtonLike = true;
+    }
+    if (tag === 'button') signature.hasButtonLike = true;
+    if (['span', 'strong', 'b', 'em', 'i', 'u', 'font'].includes(tag)) signature.hasInlineWrapper = true;
+    if (['div', 'section', 'article', 'center'].includes(tag) && node !== el) signature.hasBlockWrapper = true;
+    if (hasMeaningfulInlineStyle(node) || node.getAttribute?.('bgcolor') || node.getAttribute?.('align')) {
+      signature.hasStyledNode = true;
+    }
+    if (hasMeaningfulTextContent(node) || tag === 'img' || tag === 'a' || tag === 'button') {
+      signature.meaningfulNodeCount += 1;
+    }
+  });
+
+  signature.hasText = hasMeaningfulTextContent(el);
+  return signature;
+};
+
+const shouldPreserveContainerStructure = (el) => {
+  const signature = getElementContentSignature(el);
+  const meaningfulKinds = [
+    signature.hasText,
+    signature.hasImage,
+    signature.hasLink,
+    signature.hasButtonLike,
+    signature.hasInlineWrapper,
+    signature.hasBlockWrapper,
+    signature.hasNestedTable,
+  ].filter(Boolean).length;
+
+  return !!(
+    signature.hasStyledNode ||
+    signature.hasNestedTable ||
+    signature.hasButtonLike ||
+    meaningfulKinds >= 2 ||
+    signature.meaningfulNodeCount >= 3
+  );
+};
+
 const findLikelyContentWidth = (root) => {
   if (!root) return '600px';
 
@@ -661,7 +760,8 @@ const extractComponentsFromElement = (node, components = []) => {
         id: makeId(), 
         type: COMPONENT_TYPES.MENU, 
         content: allLinks.join('\n'), 
-        settings: createComponentSettings(el, { textAlign: 'center' }) 
+        menuItems: allLinks.join('\n'),
+        settings: createComponentSettings(el, { textAlign: 'center', originalTag: tag }) 
       });
       return;
     }
@@ -692,8 +792,9 @@ const extractComponentsFromElement = (node, components = []) => {
 
   // 3. Header Detection
   if (matchesSemanticPattern(el, 'HEADER', ['header', 'top', 'branding'])) {
+    const hasComplexChildren = !!el.querySelector('a, img, table');
     const text = (el.innerText || el.textContent || '').trim();
-    if (text && (el.children?.length || 0) <= 1) {
+    if (!hasComplexChildren && text && (el.children?.length || 0) <= 1) {
       components.push({ id: makeId(), type: COMPONENT_TYPES.HEADER, content: text, settings: createComponentSettings(el) });
       return;
     }
@@ -701,8 +802,9 @@ const extractComponentsFromElement = (node, components = []) => {
 
   // 4. Footer Detection
   if (matchesSemanticPattern(el, 'FOOTER', ['footer', 'bottom', 'legal', 'unsubscribe', 'disclaimer'])) {
+    const hasComplexChildren = !!el.querySelector('a, img, table');
     const text = (el.innerText || el.textContent || '').trim();
-    if (text && (el.children?.length || 0) <= 1) {
+    if (!hasComplexChildren && text && (el.children?.length || 0) <= 1) {
       components.push({ id: makeId(), type: COMPONENT_TYPES.FOOTER, content: text, settings: createComponentSettings(el) });
       return;
     }
@@ -710,8 +812,9 @@ const extractComponentsFromElement = (node, components = []) => {
 
   // 5. Sidebar Detection
   if (matchesSemanticPattern(el, 'SIDEBAR', ['sidebar', 'aside', 'column-side'])) {
+    const hasComplexChildren = !!el.querySelector('a, img, table');
     const text = (el.innerText || el.textContent || '').trim();
-    if (text && (el.children?.length || 0) <= 1) {
+    if (!hasComplexChildren && text && (el.children?.length || 0) <= 1) {
       components.push({ id: makeId(), type: COMPONENT_TYPES.SIDEBAR, content: text, settings: createComponentSettings(el) });
       return;
     }
@@ -719,8 +822,9 @@ const extractComponentsFromElement = (node, components = []) => {
 
   // 6. Banner / Hero Detection
   if (matchesSemanticPattern(el, 'BANNER', ['banner', 'hero', 'card', 'intro'])) {
+    const hasComplexChildren = !!el.querySelector('a, img, table');
     const text = (el.innerText || el.textContent || '').trim();
-    if (text && (el.children?.length || 0) <= 1) {
+    if (!hasComplexChildren && text && (el.children?.length || 0) <= 1) {
       components.push({ id: makeId(), type: COMPONENT_TYPES.BANNER, content: text, settings: createComponentSettings(el) });
       return;
     }
@@ -738,7 +842,7 @@ const extractComponentsFromElement = (node, components = []) => {
         type: COMPONENT_TYPES.MENU,
         content: items.join('\n'),
         menuItems: items.join('\n'),
-        settings: createComponentSettings(el),
+        settings: createComponentSettings(el, { originalTag: tag }),
       });
       return;
     }
@@ -886,22 +990,8 @@ const extractComponentsFromElement = (node, components = []) => {
     }
     const text = `${el.textContent || ''}`.replace(/\s+/g, ' ').trim();
     if (text && !isDecorativeSeparator(text)) {
-      components.push({ id: makeId(), type: COMPONENT_TYPES.DIV, content: text, settings: createComponentSettings(el) });
+      components.push({ id: makeId(), type: COMPONENT_TYPES.PARAGRAPH, content: text, settings: createComponentSettings(el, { originalTag: 'div' }) });
       return;
-    }
-  }
-
-  // Fallback for complex structural elements — preserve as HTML component if they have meaningful content
-  if (['div', 'section', 'article', 'table'].includes(tag) && !isLeafTextElement(el)) {
-    const text = (el.innerText || el.textContent || '').trim();
-    const hasImg = !!el.querySelector('img');
-    if ((text.length > 20 || hasImg) && !el.querySelector('table')) { // Don't swallow nested table structures yet
-       // Only if it's not a generic container we're already recursing into
-       const meaningfulChildren = Array.from(el.children).filter(c => !['script', 'style', 'br'].includes(c.tagName.toLowerCase()));
-       if (meaningfulChildren.length > 0 && meaningfulChildren.length <= 3) {
-         components.push({ id: makeId(), type: COMPONENT_TYPES.HTML, content: el.innerHTML, settings: createComponentSettings(el) });
-         return;
-       }
     }
   }
 
@@ -1194,6 +1284,13 @@ const defaultColSettings = () => ({
 const findContentBlockElements = (sectionTd) => {
   if (!sectionTd) return [];
   const blocks = [];
+  const directChildren = Array.from(sectionTd.children || []);
+  const hasStructuralContent = shouldPreserveContainerStructure(sectionTd);
+  const hasMeaningfulDirectNonTableContent = directChildren.some((child) => {
+    const tag = `${child.tagName || ''}`.toLowerCase();
+    if (['table', 'tbody', 'tr', 'td', 'script', 'style', 'br'].includes(tag)) return false;
+    return shouldPreserveContainerStructure(child) || hasMeaningfulTextContent(child);
+  });
 
   // Strategy 1: wrapper divs that contain tables (works for Benchmark, Mailchimp, etc.)
   const directDivs = Array.from(sectionTd.children || []).filter((c) =>
@@ -1201,7 +1298,7 @@ const findContentBlockElements = (sectionTd) => {
   );
   for (const div of directDivs) {
     const innerTable = div.querySelector?.('table');
-    if (innerTable && !isNoiseTable(innerTable) && !isDividerTable(innerTable)) {
+    if (innerTable && !isNoiseTable(innerTable) && !isDividerTable(innerTable) && !shouldPreserveContainerStructure(div)) {
       blocks.push(innerTable);
     }
   }
@@ -1211,7 +1308,9 @@ const findContentBlockElements = (sectionTd) => {
   const directTables = Array.from(sectionTd.children || []).filter((c) =>
     `${c.tagName || ''}`.toLowerCase() === 'table' && !isNoiseTable(c) && !isDividerTable(c)
   );
-  if (directTables.length > 0) return directTables;
+  if (directTables.length > 0 && !hasMeaningfulDirectNonTableContent && !hasStructuralContent) return directTables;
+
+  if (hasMeaningfulDirectNonTableContent || hasStructuralContent) return [sectionTd];
 
   // Strategy 3: look inside nested wrapper tables for content tables
   const nestedTables = Array.from(sectionTd.querySelectorAll?.('table') || []);

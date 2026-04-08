@@ -37,6 +37,8 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
 
     // Layout
     boxSizing: 'border-box',
+    display: '',
+    float: '',
 
     // Link specific
     linkColor: '',
@@ -48,6 +50,70 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
     // List specific
     listStyleType: 'disc',
   });
+
+  const normalizeColorValue = (value, fallback = '#000000') => {
+    const raw = `${value || ''}`.trim();
+    return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(raw) ? raw : fallback;
+  };
+
+  const renderColorField = (label, key, placeholder, fallback = '#000000') => (
+    <Box mb={3}>
+      <Text fontSize="xs" mb={1}>{label}</Text>
+      <Box display="flex" gap={2} alignItems="center">
+        <Input
+          type="color"
+          value={normalizeColorValue(settings[key], fallback)}
+          onChange={(e) => handleSettingChange(key, e.target.value)}
+          size="sm"
+          width="56px"
+          p={1}
+          borderColor={settings[key] ? normalizeColorValue(settings[key], fallback) : 'gray.200'}
+          bg="white"
+        />
+        <Input
+          value={settings[key]}
+          onChange={(e) => handleSettingChange(key, e.target.value)}
+          size="sm"
+          placeholder={placeholder}
+        />
+        <Box
+          width="24px"
+          height="24px"
+          borderRadius="md"
+          border="1px solid"
+          borderColor="gray.200"
+          bg={settings[key] && settings[key] !== 'transparent' ? normalizeColorValue(settings[key], fallback) : 'transparent'}
+          backgroundImage={settings[key] === 'transparent' ? 'linear-gradient(45deg, #e2e8f0 25%, transparent 25%), linear-gradient(-45deg, #e2e8f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e2e8f0 75%), linear-gradient(-45deg, transparent 75%, #e2e8f0 75%)' : 'none'}
+          backgroundSize="8px 8px"
+          backgroundPosition="0 0, 0 4px, 4px -4px, -4px 0px"
+        />
+      </Box>
+    </Box>
+  );
+
+  const renderTemplateColorField = (label, key, placeholder, fallback = '#000000') => (
+    <Box mb={3}>
+      <Text fontSize="xs" mb={1}>{label}</Text>
+      <Box display="flex" gap={2} alignItems="center">
+        <Input
+          type="color"
+          value={normalizeColorValue(templateSettings?.[key], fallback)}
+          onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, [key]: e.target.value })}
+          size="sm"
+          width="56px"
+          p={1}
+          bg="white"
+        />
+        <Input
+          value={templateSettings?.[key] || ''}
+          onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, [key]: e.target.value })}
+          size="sm"
+          placeholder={placeholder}
+        />
+        <Box width="24px" height="24px" borderRadius="md" border="1px solid" borderColor="gray.200" bg={normalizeColorValue(templateSettings?.[key], fallback)} />
+      </Box>
+    </Box>
+  );
 
   // Update settings when selected component changes
   useEffect(() => {
@@ -75,6 +141,8 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
         letterSpacing: '',
         lineHeight: '',
         boxSizing: 'border-box',
+        display: '',
+        float: '',
         linkColor: '',
         buttonColor: '',
         buttonTextColor: '',
@@ -138,6 +206,12 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
     'UnorderedList',
     'Div',
     'Span',
+    'Menu',
+    'Nav',
+    'Header',
+    'Footer',
+    'Sidebar',
+    'Banner',
   ];
 
   const componentTypesWithTextStyles = [
@@ -152,6 +226,12 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
     'UnorderedList',
     'Div',
     'Span',
+    'Menu',
+    'Nav',
+    'Header',
+    'Footer',
+    'Sidebar',
+    'Banner',
   ];
 
   const showPadding = isRowOrColumn || (!isComponent ? true : componentTypesWithBoxStyles.includes(componentType));
@@ -216,28 +296,12 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
               />
             </Box>
 
-            <Box mb={3}>
-              <Text fontSize="xs" mb={1}>Text Color</Text>
-              <Input
-                value={templateSettings?.textColor || '#000000'}
-                onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, textColor: e.target.value })}
-                size="sm"
-                placeholder="#000000 / rgb(...) / inherit"
-              />
-            </Box>
+            {renderTemplateColorField('Text Color', 'textColor', '#000000 / rgb(...) / inherit', '#000000')}
 
             <Divider my={4} />
 
             <Text fontSize="md" fontWeight="semibold" mb={2}>Template</Text>
-            <Box mb={3}>
-              <Text fontSize="xs" mb={1}>Body Background Color</Text>
-              <Input
-                value={templateSettings?.bodyBackgroundColor || '#f5f5f5'}
-                onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, bodyBackgroundColor: e.target.value })}
-                size="sm"
-                placeholder="transparent / #f5f5f5 / rgba(...)"
-              />
-            </Box>
+            {renderTemplateColorField('Body Background Color', 'bodyBackgroundColor', 'transparent / #f5f5f5 / rgba(...)', '#f5f5f5')}
 
             <Box mb={3}>
               <Text fontSize="xs" mb={1}>Body Background Image</Text>
@@ -279,15 +343,7 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
               />
             </Box>
 
-            <Box mb={3}>
-              <Text fontSize="xs" mb={1}>Container Background Color</Text>
-              <Input
-                value={templateSettings?.containerBackgroundColor || '#ffffff'}
-                onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, containerBackgroundColor: e.target.value })}
-                size="sm"
-                placeholder="transparent / #ffffff / rgba(...)"
-              />
-            </Box>
+            {renderTemplateColorField('Container Background Color', 'containerBackgroundColor', 'transparent / #ffffff / rgba(...)', '#ffffff')}
 
             <Box mb={3}>
               <Text fontSize="xs" mb={1}>Template Width</Text>
@@ -487,6 +543,7 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                         onChange={(e) => handleSettingChange('textAlign', e.target.value)}
                         size="sm"
                       >
+                        <option value="">Default</option>
                         <option value="left">Left</option>
                         <option value="center">Center</option>
                         <option value="right">Right</option>
@@ -494,15 +551,7 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                       </Select>
                     </Box>
 
-                    <Box mb={3}>
-                      <Text fontSize="xs" mb={1}>Text Color</Text>
-                      <Input
-                        value={settings.textColor}
-                        onChange={(e) => handleSettingChange('textColor', e.target.value)}
-                        size="sm"
-                        placeholder="#000000 / rgb(...) / inherit"
-                      />
-                    </Box>
+                    {renderColorField('Text Color', 'textColor', '#000000 / rgb(...) / inherit', '#000000')}
 
                     <Divider my={4} />
                   </>
@@ -536,15 +585,7 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                 {showBackground && (
                   <>
                     <Text fontSize="md" fontWeight="semibold" mb={2}>Background</Text>
-                    <Box mb={3}>
-                      <Text fontSize="xs" mb={1}>Background Color</Text>
-                      <Input
-                        value={settings.backgroundColor}
-                        onChange={(e) => handleSettingChange('backgroundColor', e.target.value)}
-                        size="sm"
-                        placeholder="transparent / #ffffff / rgba(...)"
-                      />
-                    </Box>
+                    {renderColorField('Background Color', 'backgroundColor', 'transparent / #ffffff / rgba(...)', '#ffffff')}
 
                     <Box mb={3}>
                       <Text fontSize="xs" mb={1}>Background Image URL</Text>
@@ -635,15 +676,7 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                       </Select>
                     </Box>
 
-                    <Box mb={3}>
-                      <Text fontSize="xs" mb={1}>Border Color</Text>
-                      <Input
-                        value={settings.borderColor}
-                        onChange={(e) => handleSettingChange('borderColor', e.target.value)}
-                        size="sm"
-                        placeholder="#000000 / rgba(...)"
-                      />
-                    </Box>
+                    {renderColorField('Border Color', 'borderColor', '#000000 / rgba(...)', '#000000')}
 
                     <Box mb={3}>
                       <Text fontSize="xs" mb={1}>Border Width</Text>
@@ -725,6 +758,35 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                       </Select>
                     </Box>
 
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Display</Text>
+                      <Select
+                        value={settings.display}
+                        onChange={(e) => handleSettingChange('display', e.target.value)}
+                        size="sm"
+                      >
+                        <option value="">Default</option>
+                        <option value="block">Block</option>
+                        <option value="inline-block">Inline Block</option>
+                        <option value="inline">Inline</option>
+                        <option value="flex">Flex</option>
+                      </Select>
+                    </Box>
+
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Float</Text>
+                      <Select
+                        value={settings.float}
+                        onChange={(e) => handleSettingChange('float', e.target.value)}
+                        size="sm"
+                      >
+                        <option value="">Default</option>
+                        <option value="left">Left</option>
+                        <option value="right">Right</option>
+                        <option value="none">None</option>
+                      </Select>
+                    </Box>
+
                     <Divider my={4} />
                   </>
                 )}
@@ -733,39 +795,15 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                 {selectedTarget.kind === 'component' && selectedTarget.data?.type === 'Button' && (
                   <>
                     <Text fontSize="md" fontWeight="semibold" mb={2}>Button Settings</Text>
-                    <Box mb={3}>
-                      <Text fontSize="xs" mb={1}>Button Color</Text>
-                      <Input
-                        value={settings.buttonColor}
-                        onChange={(e) => handleSettingChange('buttonColor', e.target.value)}
-                        size="sm"
-                        placeholder="#0066cc / rgba(...)"
-                      />
-                    </Box>
-                    <Box mb={3}>
-                      <Text fontSize="xs" mb={1}>Button Text Color</Text>
-                      <Input
-                        value={settings.buttonTextColor}
-                        onChange={(e) => handleSettingChange('buttonTextColor', e.target.value)}
-                        size="sm"
-                        placeholder="#ffffff / inherit"
-                      />
-                    </Box>
+                    {renderColorField('Button Color', 'buttonColor', '#0066cc / rgba(...)', '#0066cc')}
+                    {renderColorField('Button Text Color', 'buttonTextColor', '#ffffff / inherit', '#ffffff')}
                   </>
                 )}
 
                 {selectedTarget.kind === 'component' && selectedTarget.data?.type === 'Link' && (
                   <>
                     <Text fontSize="md" fontWeight="semibold" mb={2}>Link Settings</Text>
-                    <Box mb={3}>
-                      <Text fontSize="xs" mb={1}>Link Color</Text>
-                      <Input
-                        value={settings.linkColor}
-                        onChange={(e) => handleSettingChange('linkColor', e.target.value)}
-                        size="sm"
-                        placeholder="#0066cc / inherit"
-                      />
-                    </Box>
+                    {renderColorField('Link Color', 'linkColor', '#0066cc / inherit', '#0066cc')}
                   </>
                 )}
 
@@ -797,6 +835,8 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                       letterSpacing: '',
                       lineHeight: '',
                       boxSizing: 'border-box',
+                      display: '',
+                      float: '',
                       linkColor: '',
                       buttonColor: '',
                       buttonTextColor: '',

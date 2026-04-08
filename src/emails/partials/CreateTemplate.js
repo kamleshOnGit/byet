@@ -337,6 +337,14 @@ const CreateTemplate = () => {
       return parts.join('');
     };
 
+    const makeLayoutStyle = (s) => {
+      if (!s) return '';
+      const parts = [];
+      if (s.display) parts.push(`display:${s.display};`);
+      if (s.float) parts.push(`float:${s.float};`);
+      return parts.join('');
+    };
+
     const makeBoxStyle = (s, options = {}) => {
       const {
         includePadding = true,
@@ -351,6 +359,7 @@ const CreateTemplate = () => {
       if (includeBackground) parts.push(makeBackgroundStyle(s));
       if (includeText) parts.push(makeTextStyle(s));
       if (includeDimensions) parts.push(makeDimensionStyle(s));
+      parts.push(makeLayoutStyle(s));
       parts.push(makeBorderStyle(s));
       parts.push(makeRadiusStyle(s));
       if (s?.boxSizing) parts.push(`box-sizing:${s.boxSizing};`);
@@ -403,16 +412,17 @@ const CreateTemplate = () => {
         case COMPONENT_TYPES.IMAGE: {
           const width = normalizeCssValue(s.width || component.imageWidth, '');
           const height = normalizeCssValue(s.height || component.imageHeight, '');
-          const sizeStyle = `${width ? `width:${width};max-width:${width};` : 'max-width:100%;width:auto;'}${height ? `height:${height};` : 'height:auto;'}`;
+          const sizeStyle = `${width ? `width:${width};max-width:${width};` : 'max-width:100%;width:auto;'}${height ? `height:${height};` : 'height:auto;'}${s.display ? `display:${s.display};` : 'display:block;'}${s.float ? `float:${s.float};` : ''}`;
           return wrap(`<img src="${escapeHtml(component.imageUrl) || ''}" alt="${escapeHtml(component.content) || ''}" style="display:block;border:0;outline:none;text-decoration:none;${sizeStyle}" />`);
         }
         case COMPONENT_TYPES.LINK:
-          return wrap(`<a href="${escapeHtml(component.linkUrl) || '#'}" style="display:inline-block;${makeTextStyle({ ...s, textColor: s.linkColor || s.textColor || '#0066cc' })}text-decoration:underline;">${renderRichText(component.content)}</a>`);
+          return wrap(`<a href="${escapeHtml(component.linkUrl) || '#'}" style="${s.display ? `display:${s.display};` : 'display:inline-block;'}${s.float ? `float:${s.float};` : ''}${makeTextStyle({ ...s, textColor: s.linkColor || s.textColor || '#0066cc' })}text-decoration:underline;">${renderRichText(component.content)}</a>`);
         case COMPONENT_TYPES.BUTTON: {
           const buttonBg = s.buttonColor || s.backgroundColor || '#0066cc';
           const buttonText = s.buttonTextColor || s.textColor || '#ffffff';
           const buttonStyle = [
-            'display:inline-block;',
+            s.display ? `display:${s.display};` : 'display:inline-block;',
+            s.float ? `float:${s.float};` : '',
             makePaddingStyle(s.padding || { top: 10, right: 20, bottom: 10, left: 20 }),
             `background-color:${buttonBg};`,
             `color:${buttonText};`,
@@ -423,11 +433,11 @@ const CreateTemplate = () => {
           return wrap(`<a href="${escapeHtml(component.linkUrl) || '#'}" target="_blank" style="${buttonStyle}">${renderRichText(component.content || 'Click Me')}</a>`);
         }
         case COMPONENT_TYPES.SOCIAL_LINK:
-          return wrap(`<a href="${escapeHtml(component.linkUrl) || '#'}" target="_blank" style="display:inline-block;${makeTextStyle({ ...s, textColor: s.linkColor || s.textColor || '#0066cc' })}text-decoration:underline;">${renderRichText(component.content || 'Social Link')}</a>`);
+          return wrap(`<a href="${escapeHtml(component.linkUrl) || '#'}" target="_blank" style="${s.display ? `display:${s.display};` : 'display:inline-block;'}${s.float ? `float:${s.float};` : ''}${makeTextStyle({ ...s, textColor: s.linkColor || s.textColor || '#0066cc' })}text-decoration:underline;">${renderRichText(component.content || 'Social Link')}</a>`);
         case COMPONENT_TYPES.SOCIAL_ICONS: {
           const urls = (component.socialUrls || '').split('\n').filter(Boolean);
           const icons = urls.map((url) => `<a href="${escapeHtml(url)}" target="_blank" style="display:inline-block;margin:0 4px;"><img src="https://dummyimage.com/32x32/cccccc/000000.png&text=S" alt="social" width="32" height="32" style="display:block;border:0;outline:none;" /></a>`).join('');
-          return wrap(`<div style="text-align:${s.textAlign || 'center'};">${icons || '<span>Social Icons</span>'}</div>`);
+          return wrap(`<div style="${s.textAlign ? `text-align:${s.textAlign};` : ''}${makeLayoutStyle(s)}">${icons || '<span>Social Icons</span>'}</div>`);
         }
         case COMPONENT_TYPES.HR:
           return wrap(`<div style="border-top:1px solid ${s.borderColor || '#cccccc'};font-size:0;line-height:0;">&nbsp;</div>`);
@@ -436,13 +446,13 @@ const CreateTemplate = () => {
         case COMPONENT_TYPES.SPACE:
           return makeSpacerTable(component.height || 20);
         case COMPONENT_TYPES.ICON:
-          return wrap(`<div style="${makeTextStyle(s)}text-align:${s.textAlign || 'center'};font-size:${normalizeCssValue(s.fontSize, '24px')};">${escapeHtml(component.iconName) || '★'}</div>`);
+          return wrap(`<div style="${makeTextStyle(s)}${s.textAlign ? `text-align:${s.textAlign};` : ''}${makeLayoutStyle(s)}font-size:${normalizeCssValue(s.fontSize, '24px')};">${escapeHtml(component.iconName) || '★'}</div>`);
         case COMPONENT_TYPES.HTML:
           return wrap(component.htmlContent || '');
         case COMPONENT_TYPES.MENU: {
           const items = (component.menuItems || component.content || '').split('\n').filter(Boolean);
           const links = items.map((item) => `<a href="#" style="display:inline-block;padding:0 8px;${makeTextStyle({ ...s, textColor: s.textColor || '#333333' })}text-decoration:none;">${escapeHtml(item)}</a>`).join('');
-          return wrap(`<div style="text-align:${s.textAlign || 'center'};">${links}</div>`);
+          return wrap(`<div style="${s.textAlign ? `text-align:${s.textAlign};` : ''}${makeLayoutStyle(s)}">${links}</div>`);
         }
         case COMPONENT_TYPES.DIV:
           return wrap(`<div style="margin:0;${makeTextStyle(s)}${makeBoxStyle(s, { includeBackground: true, includePadding: true, includeBorder: true, includeRadius: true })}">${renderRichText(component.content)}</div>`);
@@ -451,7 +461,7 @@ const CreateTemplate = () => {
         case COMPONENT_TYPES.NAV: {
           const items = (component.content || '').split('\n').filter(Boolean);
           const links = items.map((item) => `<a href="#" style="display:inline-block;padding:0 10px;${makeTextStyle(s)}text-decoration:none;">${escapeHtml(item)}</a>`).join('');
-          return wrap(`<div style="text-align:${s.textAlign || 'center'};${makeBoxStyle(s, { includeBackground: true, includePadding: true, includeBorder: true, includeRadius: true })}">${links || '<span>Navigation</span>'}</div>`);
+          return wrap(`<div style="${s.textAlign ? `text-align:${s.textAlign};` : ''}${makeBoxStyle(s, { includeBackground: true, includePadding: true, includeBorder: true, includeRadius: true })}">${links || '<span>Navigation</span>'}</div>`);
         }
         case COMPONENT_TYPES.HEADER:
         case COMPONENT_TYPES.FOOTER:

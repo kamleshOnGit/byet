@@ -155,6 +155,9 @@ const DroppableRow = ({ row, setComponents, parentId, index, moveRow, updateSect
     } else if (s.borderRadius === 0) {
       out.borderRadius = '0px';
     }
+    if (s.float) {
+      out.float = s.float;
+    }
     if (s.display) {
       out.display = s.display;
     }
@@ -195,8 +198,8 @@ const DroppableRow = ({ row, setComponents, parentId, index, moveRow, updateSect
       style={{
         ...rowStyle,
         ...rowSettingsStyle,
-        justifyContent: 'flex-start',
-        alignItems: 'stretch',
+        justifyContent: row?.settings?.justifyContent || 'flex-start',
+        alignItems: row?.settings?.alignItems || 'stretch',
         outline: isSelected ? '2px solid #3182ce' : 'none',
       }}
     >

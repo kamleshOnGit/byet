@@ -112,6 +112,12 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
     if (s.boxSizing) {
       styles.boxSizing = s.boxSizing;
     }
+    if (s.display) {
+      styles.display = s.display;
+    }
+    if (s.float) {
+      styles.float = s.float;
+    }
 
     return styles;
   };
@@ -144,7 +150,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
             onClick={handleSelect}
             style={{
               ...componentStyles,
-              display: 'inline-block',
+              display: component.settings?.display || componentStyles.display || 'inline-block',
               cursor: 'pointer',
               backgroundColor: component.settings?.buttonColor || '#0066cc',
               color: component.settings?.buttonTextColor || '#ffffff',
@@ -281,10 +287,12 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
       case COMPONENT_TYPES.IMAGE:
         // For images, don't apply padding that would reduce the image size
         const imageStyles = {
-          textAlign: component.settings?.textAlign || 'center',
+          textAlign: component.settings?.textAlign || componentStyles.textAlign || 'center',
           backgroundColor: componentStyles.backgroundColor,
           margin: 0,
           padding: 0,
+          display: component.settings?.display || componentStyles.display,
+          float: component.settings?.float || componentStyles.float,
         };
         return (
           <Box onClick={handleSelect} style={{ width: '100%', ...imageStyles }}>
@@ -295,7 +303,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                 width: component.settings?.width || 'auto',
                 height: component.settings?.height || 'auto',
                 maxWidth: '100%',
-                display: 'inline-block',
+                display: component.settings?.display || 'inline-block',
                 border: 'none',
                 margin: 0,
                 padding: 0,
@@ -575,6 +583,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
             style={{
               border: isSelected ? '1px dotted #3182ce' : '1px dotted transparent',
               display: 'inline-block',
+              ...(component.settings?.display ? { display: component.settings.display } : {}),
               transition: 'border 0.2s ease',
               ...componentStyles
             }}

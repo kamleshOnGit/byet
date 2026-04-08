@@ -1,6 +1,19 @@
 import { COMPONENT_TYPES } from '../partials/componentTypes';
 import { DEFAULT_IR_DOCUMENT, IR_NODE_KIND, TAG_TO_COMPONENT_TYPE, createIrId } from '../ir/schema';
 
+const normalizeImportedUrl = (value, assetBaseUrl) => {
+  if (!value) return '';
+  const raw = `${value}`.trim();
+  if (!raw || raw.startsWith('data:') || raw.startsWith('cid:') || raw.startsWith('#')) return raw;
+  if (/^(https?:|file:|mailto:|tel:)/i.test(raw)) return raw;
+  if (!assetBaseUrl) return raw;
+  try {
+    return new URL(raw, assetBaseUrl).toString();
+  } catch (err) {
+    return raw;
+  }
+};
+
 const pickAttributes = (el) => {
   if (!el || !el.getAttributeNames) return {};
   const out = {};
@@ -9,6 +22,57 @@ const pickAttributes = (el) => {
     if (v !== null && v !== undefined) out[name] = `${v}`;
   });
   return out;
+};
+
+const mergeSettings = (base = {}, own = {}) => ({
+  ...base,
+  ...own,
+  padding: own.padding || base.padding ? { ...(base.padding || {}), ...(own.padding || {}) } : undefined,
+  margin: own.margin || base.margin ? { ...(base.margin || {}), ...(own.margin || {}) } : undefined,
+});
+
+const getContentSignature = (el) => {
+  const signature = {
+    hasText: false,
+    hasImage: false,
+    hasLink: false,
+    hasButtonLike: false,
+    hasInlineWrapper: false,
+    hasBlockWrapper: false,
+    hasNestedTable: false,
+    hasStyledNode: false,
+    tags: [],
+  };
+
+  if (!el || el.nodeType !== Node.ELEMENT_NODE) return signature;
+
+  const tagSet = new Set();
+  const nodes = [el, ...Array.from(el.querySelectorAll?.('*') || [])];
+  nodes.forEach((node) => {
+    const tag = `${node.tagName || ''}`.toLowerCase();
+    if (!tag) return;
+    tagSet.add(tag);
+
+    const text = `${node.textContent || ''}`.replace(/\s+/g, ' ').trim();
+    const style = node.getAttribute?.('style') || '';
+
+    if (text) signature.hasText = true;
+    if (tag === 'img') signature.hasImage = true;
+    if (tag === 'a') {
+      signature.hasLink = true;
+      if (styleValue(style, 'background-color') || styleValue(style, 'padding')) {
+        signature.hasButtonLike = true;
+      }
+    }
+    if (tag === 'button') signature.hasButtonLike = true;
+    if (['span', 'strong', 'b', 'em', 'i', 'u', 'font'].includes(tag)) signature.hasInlineWrapper = true;
+    if (['div', 'section', 'article', 'center'].includes(tag) && node !== el) signature.hasBlockWrapper = true;
+    if (tag === 'table' && node !== el) signature.hasNestedTable = true;
+    if (style.trim() || node.getAttribute?.('bgcolor') || node.getAttribute?.('align')) signature.hasStyledNode = true;
+  });
+
+  signature.tags = Array.from(tagSet);
+  return signature;
 };
 
 const styleValue = (styleText, prop) => {
@@ -43,64 +107,8 @@ const parseBoxValues = (value) => {
   };
 };
 
-const countAncestorTables = (el) => {
-  let cur = el?.parentElement;
-  let depth = 0;
-  while (cur) {
-    if (`${cur.tagName || ''}`.toLowerCase() === 'table') depth += 1;
-    cur = cur.parentElement;
-  }
-  return depth;
-};
 
-const computeBaselineTableNesting = (rootEl) => {
-  if (!rootEl?.querySelectorAll) return 0;
-  const tables = Array.from(rootEl.querySelectorAll('table'));
-  const depths = tables.map((t) => countAncestorTables(t));
-  const positiveDepths = depths.filter((d) => d > 0);
-  if (!positiveDepths.length) return 0;
-  return Math.min(...positiveDepths);
-};
-
-const isComplexHtmlBlock = (el, ctx) => {
-  if (!el?.querySelectorAll) return false;
-  const tag = `${el.tagName || ''}`.toLowerCase();
-  const name = `${el.getAttribute?.('name') || ''}`.toLowerCase();
-  const id = `${el.getAttribute?.('id') || ''}`.toLowerCase();
-  const cls = `${el.getAttribute?.('class') || ''}`.toLowerCase();
-
-  const tableAncestorDepth = ctx?.tableAncestorDepth || 0;
-  const baselineTableAncestorDepth = ctx?.baselineTableAncestorDepth || 0;
-  const complexTableDepthThreshold = baselineTableAncestorDepth + 1;
-
-  const tableCount = el.querySelectorAll('table').length;
-  const imgCount = el.querySelectorAll('img').length;
-  const linkCount = el.querySelectorAll('a').length;
-  const nodeCount = el.querySelectorAll('*').length;
-
-  const looksSemanticSection =
-    name.includes('footer') || id.includes('footer') || cls.includes('footer') ||
-    name.includes('header') || id.includes('header') || cls.includes('header') ||
-    name.includes('navbar') || id.includes('navbar') || cls.includes('navbar');
-
-  if (tag === 'table') {
-    // If the block is extremely table-nested, keep it as a read-only HTML blob.
-    // Still avoid blobifying the very outer wrapper table; only blobify nested tables.
-    if (tableAncestorDepth >= complexTableDepthThreshold && tableCount > 4) return true;
-    if (tableAncestorDepth >= complexTableDepthThreshold + 1 && tableCount >= 2) return true;
-    if (looksSemanticSection && tableAncestorDepth >= complexTableDepthThreshold && tableCount >= 2) return true;
-    if (tableAncestorDepth >= complexTableDepthThreshold + 1 && nodeCount >= 220 && (imgCount + linkCount) <= 6) return true;
-  }
-
-  // Semantic markers like "bmeFooter" frequently appear on huge wrapper elements.
-  // Only treat them as complex when they are also table-heavy / deeply nested.
-  if (looksSemanticSection && tableAncestorDepth >= complexTableDepthThreshold && tableCount >= 3 && nodeCount >= 160) return true;
-  if (tableAncestorDepth >= complexTableDepthThreshold + 1 && nodeCount >= 320) return true;
-
-  return false;
-};
-
-const parseInlineSettings = (el) => {
+const parseInlineSettings = (el, assetBaseUrl) => {
   const style = el?.getAttribute?.('style') || '';
   const out = {};
 
@@ -125,7 +133,7 @@ const parseInlineSettings = (el) => {
   const bgImg = styleValue(style, 'background-image');
   if (bgImg) {
     const urlMatch = bgImg.match(/url\((['"]?)(.*?)\1\)/i);
-    out.backgroundImage = urlMatch ? urlMatch[2] : bgImg;
+    out.backgroundImage = normalizeImportedUrl(urlMatch ? urlMatch[2] : bgImg, assetBaseUrl);
   }
   const bgSize = styleValue(style, 'background-size');
   if (bgSize) out.backgroundSize = bgSize;
@@ -174,10 +182,23 @@ const nodeFromDom = (node, ctx) => {
     const t = `${node.textContent || ''}`;
     const trimmed = t.replace(/\s+/g, ' ');
     if (!trimmed.trim()) return null;
+    const parentPath = ctx?.path || [];
     return {
       id: createIrId(),
       kind: IR_NODE_KIND.TEXT,
       text: trimmed,
+      relation: {
+        parentId: ctx?.parentId || null,
+        parentTag: ctx?.parentTag || null,
+        depth: ctx?.depth || 0,
+        path: [...parentPath, '#text'],
+        childIndex: ctx?.childIndex ?? 0,
+      },
+      styleMap: {
+        inherited: ctx?.effectiveSettings || {},
+        own: {},
+        effective: ctx?.effectiveSettings || {},
+      },
     };
   }
 
@@ -187,46 +208,60 @@ const nodeFromDom = (node, ctx) => {
   const tag = `${el.tagName || ''}`.toLowerCase();
   if (!tag || isNoiseTag(tag)) return null;
 
-  const nextCtx = {
-    baselineTableAncestorDepth: ctx?.baselineTableAncestorDepth || 0,
-    tableAncestorDepth: (ctx?.tableAncestorDepth || 0) + (tag === 'table' ? 1 : 0),
-  };
-
   const attrs = pickAttributes(el);
-  const settings = parseInlineSettings(el);
+  const ownSettings = parseInlineSettings(el, ctx?.assetBaseUrl);
 
   const bgAttr = attrs.bgcolor || attrs.background;
-  if (bgAttr && !settings.backgroundColor) {
-    settings.backgroundColor = bgAttr;
+  if (bgAttr && !ownSettings.backgroundColor) {
+    ownSettings.backgroundColor = bgAttr;
   }
 
-  if (isComplexHtmlBlock(el, nextCtx)) {
-    return {
-      id: createIrId(),
-      kind: IR_NODE_KIND.COMPONENT,
-      type: COMPONENT_TYPES.HTML,
-      tag,
-      attrs,
-      settings: { ...settings, readOnly: true },
-      props: {
-        htmlContent: el.outerHTML || '',
-      },
-      children: [],
-    };
+  const alignAttr = attrs.align || '';
+  if (alignAttr && !ownSettings.textAlign) {
+    ownSettings.textAlign = `${alignAttr}`.toLowerCase();
   }
+
+  const effectiveSettings = mergeSettings(ctx?.effectiveSettings || {}, ownSettings);
+  const nodeId = createIrId();
+  const nodePath = [...(ctx?.path || []), tag];
+  const contentSignature = getContentSignature(el);
+
+  const nextCtx = {
+    depth: (ctx?.depth || 0) + 1,
+    parentId: nodeId,
+    parentTag: tag,
+    path: nodePath,
+    effectiveSettings,
+    assetBaseUrl: ctx?.assetBaseUrl,
+  };
 
   const mappedType = TAG_TO_COMPONENT_TYPE[tag] || '';
   const children = Array.from(el.childNodes || [])
-    .map((c) => nodeFromDom(c, nextCtx))
+    .map((c, index) => nodeFromDom(c, { ...nextCtx, childIndex: index }))
     .filter(Boolean);
 
   const base = {
-    id: createIrId(),
+    id: nodeId,
     kind: IR_NODE_KIND.ELEMENT,
     tag,
     attrs,
-    settings,
+    settings: effectiveSettings,
+    ownSettings,
     children,
+    outerHTML: el.outerHTML,
+    relation: {
+      parentId: ctx?.parentId || null,
+      parentTag: ctx?.parentTag || null,
+      depth: ctx?.depth || 0,
+      path: nodePath,
+      childIndex: ctx?.childIndex ?? 0,
+    },
+    styleMap: {
+      inherited: ctx?.effectiveSettings || {},
+      own: ownSettings,
+      effective: effectiveSettings,
+    },
+    contentSignature,
   };
 
   if (tag === 'img') {
@@ -235,7 +270,7 @@ const nodeFromDom = (node, ctx) => {
       kind: IR_NODE_KIND.COMPONENT,
       type: COMPONENT_TYPES.IMAGE,
       props: {
-        imageUrl: attrs.src || '',
+        imageUrl: normalizeImportedUrl(attrs.src || '', ctx?.assetBaseUrl),
         alt: attrs.alt || '',
         width: attrs.width || '',
         height: attrs.height || '',
@@ -246,12 +281,19 @@ const nodeFromDom = (node, ctx) => {
 
   if (tag === 'a') {
     const text = `${el.textContent || ''}`.replace(/\s+/g, ' ').trim();
+    const directImageChildren = children.filter((child) => child?.kind === IR_NODE_KIND.COMPONENT && child?.type === COMPONENT_TYPES.IMAGE);
+    if (directImageChildren.length > 0 && !text) {
+      return {
+        ...base,
+        children: directImageChildren,
+      };
+    }
     return {
       ...base,
       kind: IR_NODE_KIND.COMPONENT,
       type: COMPONENT_TYPES.LINK,
       props: {
-        linkUrl: attrs.href || '',
+        linkUrl: normalizeImportedUrl(attrs.href || '', ctx?.assetBaseUrl),
         text,
       },
       children: [],
@@ -272,14 +314,13 @@ const nodeFromDom = (node, ctx) => {
   return base;
 };
 
-export const htmlToIr = (htmlText) => {
+export const htmlToIr = (htmlText, options = {}) => {
   const doc = DEFAULT_IR_DOCUMENT();
   const parser = new DOMParser();
   const dom = parser.parseFromString(htmlText || '', 'text/html');
   const body = dom.body;
 
-  const baselineTableAncestorDepth = computeBaselineTableNesting(body);
-  const rootCtx = { baselineTableAncestorDepth, tableAncestorDepth: 0 };
+  const rootCtx = { depth: 0, assetBaseUrl: options.assetBaseUrl || '' };
 
   const nodes = Array.from(body?.childNodes || [])
     .map((n) => nodeFromDom(n, rootCtx))

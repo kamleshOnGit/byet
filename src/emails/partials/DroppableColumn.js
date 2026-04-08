@@ -89,6 +89,12 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, updateSections, syn
     if (s.boxSizing) {
       out.boxSizing = s.boxSizing;
     }
+    if (s.display) {
+      out.display = s.display;
+    }
+    if (s.float) {
+      out.float = s.float;
+    }
     if (s.width) {
       out.width = s.width;
     }
@@ -130,13 +136,13 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, updateSections, syn
         ...columnParentStyle(colSpan),
         ...colSettingsStyle,
         outline: isSelected ? '2px solid #3182ce' : 'none',
-        display: 'flex',
-        flexDirection: 'column',
+        display: column?.settings?.display || 'flex',
+        flexDirection: column?.settings?.flexDirection || 'column',
         height: '100%',
         minHeight: 'min-content',
         flex: '1 0 auto',
-        justifyContent: 'flex-start',
-        alignItems: column?.settings?.textAlign === 'center' ? 'center' : (column?.settings?.textAlign === 'right' ? 'flex-end' : 'stretch'),
+        justifyContent: column?.settings?.justifyContent || 'flex-start',
+        alignItems: column?.settings?.alignItems || (column?.settings?.textAlign === 'center' ? 'center' : (column?.settings?.textAlign === 'right' ? 'flex-end' : 'stretch')),
         overflow: 'visible',
       }}
     >
