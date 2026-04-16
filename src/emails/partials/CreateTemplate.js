@@ -1,152 +1,39 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import { Box, Button, Heading, IconButton } from '@chakra-ui/react';
-import { AddIcon, EditIcon, SettingsIcon, ViewIcon } from '@chakra-ui/icons';
+import { AddIcon, ArrowBackIcon, ArrowForwardIcon, EditIcon, SettingsIcon, ViewIcon } from '@chakra-ui/icons';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { useLocation } from 'react-router-dom';
 import EditorTabs from './EditorTabs';
 import DroppableSection from './DroppableSection';
 import { COMPONENT_TYPES } from './componentTypes';
-
-const initialSections = () => [
-  {
-    id: Date.now(),
-    rows: [
-      {
-        id: Date.now() + 1,
-        settings: {
-          padding: { top: 10, right: 10, bottom: 10, left: 10 },
-          margin: { top: 0, right: 0, bottom: 0, left: 0 },
-          backgroundColor: '#ffffff',
-          border: 'none',
-          borderColor: '#dddddd',
-        },
-        columns: [
-          {
-            id: Date.now() + 2,
-            label: 'Column 1',
-            size: 6,
-            settings: {
-              padding: { top: 10, right: 10, bottom: 10, left: 10 },
-              margin: { top: 0, right: 0, bottom: 0, left: 0 },
-              backgroundColor: '#ffffff',
-              border: 'none',
-              borderColor: '#cccccc',
-            },
-            components: [
-              {
-                id: Date.now() + 4,
-                type: COMPONENT_TYPES.TEXT,
-                content: 'Welcome to the Email Editor!',
-                settings: {
-                  padding: { top: 10, right: 10, bottom: 10, left: 10 },
-                  margin: { top: 0, right: 0, bottom: 0, left: 0 },
-                  fontSize: 'md',
-                  fontWeight: 'normal',
-                  textAlign: 'left',
-                  textColor: '#000000',
-                  backgroundColor: '#ffffff',
-                  border: 'none',
-                },
-              },
-            ],
-          },
-          {
-            id: Date.now() + 3,
-            label: 'Column 2',
-            size: 6,
-            settings: {
-              padding: { top: 10, right: 10, bottom: 10, left: 10 },
-              margin: { top: 0, right: 0, bottom: 0, left: 0 },
-              backgroundColor: '#ffffff',
-              border: 'none',
-              borderColor: '#cccccc',
-            },
-            components: [
-              {
-                id: Date.now() + 5,
-                type: COMPONENT_TYPES.BUTTON,
-                content: 'Click Me',
-                settings: {
-                  padding: { top: 10, right: 20, bottom: 10, left: 20 },
-                  margin: { top: 0, right: 0, bottom: 0, left: 0 },
-                  fontSize: 'md',
-                  fontWeight: 'normal',
-                  textAlign: 'center',
-                  textColor: '#ffffff',
-                  backgroundColor: '#0066cc',
-                  width: 'auto',
-                  height: 'auto',
-                  border: 'none',
-                  borderRadius: 4,
-                  buttonColor: '#0066cc',
-                  buttonTextColor: '#ffffff',
-                },
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-];
+import { DUMMY_IMAGE_URL, DUMMY_LINK_URL } from './componentRegistry';
+import { useEditorStore } from '../editorStore';
 
 const safeNumber = (value, fallback) => {
   const n = Number.parseInt(`${value}`.replace(/[^0-9]/g, ''), 10);
   return Number.isFinite(n) ? n : fallback;
 };
 
-const locateTarget = (sections, target) => {
-  if (!target) return null;
-  const { kind, id } = target;
-  for (const section of sections) {
-    for (const row of section.rows) {
-      if (kind === 'row' && row.id === id) {
-        return { ...target, sectionId: section.id, data: row };
-      }
-      for (const column of row.columns) {
-        if (kind === 'column' && column.id === id) {
-          return { ...target, sectionId: section.id, rowId: row.id, data: column };
-        }
-        if (kind === 'component') {
-          const found = column.components.find((comp) => comp.id === id);
-          if (found) {
-            return {
-              ...target,
-              sectionId: section.id,
-              rowId: row.id,
-              columnId: column.id,
-              data: found,
-            };
-          }
-        }
-      }
-    }
-  }
-  return null;
-};
-
-const getInitialComponentTarget = (sections) => {
-  const section = sections[0];
-  const row = section?.rows?.[0];
-  const column = row?.columns?.[0];
-  const component = column?.components?.[0];
-  if (!component) return null;
-  return {
-    kind: 'component',
-    id: component.id,
-    sectionId: section.id,
-    rowId: row.id,
-    columnId: column.id,
-    data: component,
-  };
-};
-
 // Main CreateTemplate Component
 const CreateTemplate = () => {
   const location = useLocation();
-  const [sections, setSections] = useState(initialSections());
-  const [selectedTarget, setSelectedTarget] = useState(() => getInitialComponentTarget(sections));
+  const sections = useEditorStore((state) => state.sections);
+  const selectedTarget = useEditorStore((state) => state.selectedTarget);
+  const templateSettings = useEditorStore((state) => state.templateSettings);
+  const isEditorView = useEditorStore((state) => state.isEditorView);
+  const isBrowserView = useEditorStore((state) => state.isBrowserView);
+  const historyPastLength = useEditorStore((state) => state.history.past.length);
+  const historyFutureLength = useEditorStore((state) => state.history.future.length);
+  const initializeEditor = useEditorStore((state) => state.initializeEditor);
+  const setSelectedTarget = useEditorStore((state) => state.setSelectedTarget);
+  const setEditorViewMode = useEditorStore((state) => state.setEditorViewMode);
+  const updateTemplateSettings = useEditorStore((state) => state.updateTemplateSettings);
+  const addSection = useEditorStore((state) => state.addSection);
+  const handleTargetUpdate = useEditorStore((state) => state.updateTargetSettings);
+  const undo = useEditorStore((state) => state.undo);
+  const redo = useEditorStore((state) => state.redo);
+  const [htmlContent, setHtmlContent] = React.useState('<div>Write your HTML here</div>');
 
   const normalizeEditorCssValue = (value, fallback = '') => {
     if (value === undefined || value === null || value === '') return fallback;
@@ -165,70 +52,11 @@ const CreateTemplate = () => {
     return sizeTokenMap[raw] || raw || fallback;
   };
 
-  const [templateSettings, setTemplateSettings] = useState({
-    fontFamily: 'Arial, sans-serif',
-    fontSize: '14px',
-    fontWeight: 'normal',
-    lineHeight: '1.5',
-    textColor: '#000000',
-    bodyBackgroundColor: '#f5f5f5',
-    bodyBackgroundImage: '',
-    bodyBackgroundSize: 'cover',
-    bodyBackgroundPosition: 'center',
-    bodyBackgroundRepeat: 'no-repeat',
-    containerBackgroundColor: '#ffffff',
-    containerWidth: '600px',
-    containerMinHeight: 'auto',
-    containerPadding: '20px',
-  });
-
-  // Add state to toggle between Editor View and Code Preview
-  const [isEditorView, setIsEditorView] = useState(true);
-  // Add state for HTML content and browser view toggle
-  const [htmlContent, setHtmlContent] = useState('<div>Write your HTML here</div>');
-  const [isBrowserView, setIsBrowserView] = useState(false);
-
   useEffect(() => {
     const importedSections = location?.state?.importedSections;
     const importedTemplateSettings = location?.state?.importedTemplateSettings;
-    if (!importedSections) return;
-
-    setSections(importedSections);
-    if (importedTemplateSettings) {
-      setTemplateSettings((prev) => ({
-        ...prev,
-        ...importedTemplateSettings,
-      }));
-    }
-    setSelectedTarget(getInitialComponentTarget(importedSections));
-    setIsEditorView(true);
-    setIsBrowserView(false);
-  }, [location?.state?.importedSections, location?.state?.importedTemplateSettings]);
-
-  // Ensure updateSections is defined in the correct scope
-  const updateSections = (updater) => {
-    setSections((prevSections) => {
-      const updatedSections = updater(prevSections);
-      syncEditorToHtml(); // Generate HTML after updating sections
-      return updatedSections;
-    });
-  };
-
-  const addSection = () => {
-    const newSection = {
-      id: Date.now(),
-      rows: [
-        {
-          id: Date.now() + 1,
-          columns: [
-            { id: Date.now() + 2, label: 'Column 1', size: 4, components: [] },
-            { id: Date.now() + 3, label: 'Column 2', size: 4, components: [] },
-          ],
-        },
-      ],
-    };
-    updateSections((prev) => [...prev, newSection]);
-  };
+    initializeEditor({ importedSections, importedTemplateSettings });
+  }, [initializeEditor, location?.state?.importedSections, location?.state?.importedTemplateSettings]);
 
   // Wrap syncEditorToHtml in useCallback to prevent it from changing on every render
   const syncEditorToHtml = useCallback(() => {
@@ -322,8 +150,13 @@ const CreateTemplate = () => {
       if (s.fontFamily) parts.push(`font-family:${s.fontFamily};`);
       if (s.fontSize) parts.push(`font-size:${normalizeCssValue(s.fontSize)};`);
       if (s.fontWeight) parts.push(`font-weight:${s.fontWeight};`);
+      if (s.fontStyle) parts.push(`font-style:${s.fontStyle};`);
+      if (s.textDecoration) parts.push(`text-decoration:${s.textDecoration};`);
+      if (s.textTransform) parts.push(`text-transform:${s.textTransform};`);
       if (s.lineHeight) parts.push(`line-height:${normalizeCssValue(s.lineHeight)};`);
       if (s.letterSpacing) parts.push(`letter-spacing:${normalizeCssValue(s.letterSpacing)};`);
+      if (s.whiteSpace) parts.push(`white-space:${s.whiteSpace};`);
+      if (s.wordBreak) parts.push(`word-break:${s.wordBreak};`);
       return parts.join('');
     };
 
@@ -332,16 +165,36 @@ const CreateTemplate = () => {
       const parts = [];
       const width = normalizeCssValue(s.width, '');
       const height = normalizeCssValue(s.height, '');
+      const minWidth = normalizeCssValue(s.minWidth, '');
+      const maxWidth = normalizeCssValue(s.maxWidth, '');
+      const minHeight = normalizeCssValue(s.minHeight, '');
+      const maxHeight = normalizeCssValue(s.maxHeight, '');
       if (width) parts.push(`width:${width};`);
       if (height) parts.push(`height:${height};`);
+      if (minWidth) parts.push(`min-width:${minWidth};`);
+      if (maxWidth) parts.push(`max-width:${maxWidth};`);
+      if (minHeight) parts.push(`min-height:${minHeight};`);
+      if (maxHeight) parts.push(`max-height:${maxHeight};`);
       return parts.join('');
     };
 
-    const makeLayoutStyle = (s) => {
+    const makeLayoutStyle = (s, options = {}) => {
+      const {
+        includeDisplay = true,
+        includeFloat = true,
+        includeFlex = true,
+      } = options;
       if (!s) return '';
       const parts = [];
-      if (s.display) parts.push(`display:${s.display};`);
-      if (s.float) parts.push(`float:${s.float};`);
+      if (includeDisplay && s.display) parts.push(`display:${s.display};`);
+      if (includeFloat && s.float) parts.push(`float:${s.float};`);
+      if (includeFlex && s.alignSelf) parts.push(`align-self:${s.alignSelf};`);
+      if (includeFlex && s.justifyContent) parts.push(`justify-content:${s.justifyContent};`);
+      if (includeFlex && s.alignItems) parts.push(`align-items:${s.alignItems};`);
+      if (includeFlex && s.flexDirection) parts.push(`flex-direction:${s.flexDirection};`);
+      if (includeFlex && s.flexWrap) parts.push(`flex-wrap:${s.flexWrap};`);
+      if (s.overflow) parts.push(`overflow:${s.overflow};`);
+      if (s.opacity) parts.push(`opacity:${s.opacity};`);
       return parts.join('');
     };
 
@@ -352,6 +205,9 @@ const CreateTemplate = () => {
         includeText = true,
         includeBackground = true,
         includeDimensions = true,
+        includeDisplay = true,
+        includeFloat = true,
+        includeFlex = true,
       } = options;
       const parts = [];
       if (includePadding) parts.push(makePaddingStyle(s?.padding));
@@ -359,7 +215,7 @@ const CreateTemplate = () => {
       if (includeBackground) parts.push(makeBackgroundStyle(s));
       if (includeText) parts.push(makeTextStyle(s));
       if (includeDimensions) parts.push(makeDimensionStyle(s));
-      parts.push(makeLayoutStyle(s));
+      parts.push(makeLayoutStyle(s, { includeDisplay, includeFloat, includeFlex }));
       parts.push(makeBorderStyle(s));
       parts.push(makeRadiusStyle(s));
       if (s?.boxSizing) parts.push(`box-sizing:${s.boxSizing};`);
@@ -377,7 +233,7 @@ const CreateTemplate = () => {
     const renderComponent = (component) => {
       const s = component?.settings || {};
       const wrapperStyle = [
-        makeBoxStyle(s, { includePadding: true, includeMargin: false, includeText: true, includeBackground: true, includeDimensions: true }),
+        makeBoxStyle(s, { includePadding: true, includeMargin: false, includeText: false, includeBackground: true, includeDimensions: true }),
         'mso-line-height-rule:exactly;',
       ].join('');
       const spacerAfter = Number.isFinite(s?.margin?.bottom) ? s.margin.bottom : 0;
@@ -385,8 +241,10 @@ const CreateTemplate = () => {
       const wrap = (inner) => `
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
           <tr>
-            <td style="${wrapperStyle}">
-              ${inner}
+            <td>
+              <div style="${wrapperStyle}">
+                ${inner}
+              </div>
             </td>
           </tr>
         </table>
@@ -406,17 +264,21 @@ const CreateTemplate = () => {
         case COMPONENT_TYPES.PARAGRAPH:
           return wrap(`<p style="margin:0;${makeTextStyle(s)}">${renderRichText(component.content)}</p>`);
         case COMPONENT_TYPES.ORDERED_LIST:
-          return wrap(`<ol style="margin:0;padding-left:20px;${makeTextStyle(s)}${s.listStyleType ? `list-style-type:${escapeHtml(s.listStyleType)};` : ''}">${(component.content || '').split('\n').filter(Boolean).map((item) => `<li>${renderRichText(item)}</li>`).join('')}</ol>`);
+          return wrap(`<ol style="margin:0;padding-left:20px;${makeTextStyle(s)}${s.listStyleType ? `list-style-type:${escapeHtml(s.listStyleType)};` : ''}${s.listStylePosition ? `list-style-position:${escapeHtml(s.listStylePosition)};` : ''}">${(component.content || '').split('\n').filter(Boolean).map((item) => `<li>${renderRichText(item)}</li>`).join('')}</ol>`);
         case COMPONENT_TYPES.UNORDERED_LIST:
-          return wrap(`<ul style="margin:0;padding-left:20px;${makeTextStyle(s)}${s.listStyleType ? `list-style-type:${escapeHtml(s.listStyleType)};` : ''}">${(component.content || '').split('\n').filter(Boolean).map((item) => `<li>${renderRichText(item)}</li>`).join('')}</ul>`);
+          return wrap(`<ul style="margin:0;padding-left:20px;${makeTextStyle(s)}${s.listStyleType ? `list-style-type:${escapeHtml(s.listStyleType)};` : ''}${s.listStylePosition ? `list-style-position:${escapeHtml(s.listStylePosition)};` : ''}">${(component.content || '').split('\n').filter(Boolean).map((item) => `<li>${renderRichText(item)}</li>`).join('')}</ul>`);
         case COMPONENT_TYPES.IMAGE: {
           const width = normalizeCssValue(s.width || component.imageWidth, '');
           const height = normalizeCssValue(s.height || component.imageHeight, '');
-          const sizeStyle = `${width ? `width:${width};max-width:${width};` : 'max-width:100%;width:auto;'}${height ? `height:${height};` : 'height:auto;'}${s.display ? `display:${s.display};` : 'display:block;'}${s.float ? `float:${s.float};` : ''}`;
-          return wrap(`<img src="${escapeHtml(component.imageUrl) || ''}" alt="${escapeHtml(component.content) || ''}" style="display:block;border:0;outline:none;text-decoration:none;${sizeStyle}" />`);
+          const maxWidth = normalizeCssValue(s.maxWidth, '');
+          const minWidth = normalizeCssValue(s.minWidth, '');
+          const minHeight = normalizeCssValue(s.minHeight, '');
+          const maxHeight = normalizeCssValue(s.maxHeight, '');
+          const sizeStyle = `${width ? `width:${width};max-width:${width};` : `width:100%;max-width:${maxWidth || '100%'};`}${height ? `height:${height};` : 'height:auto;'}${minWidth ? `min-width:${minWidth};` : ''}${minHeight ? `min-height:${minHeight};` : ''}${maxHeight ? `max-height:${maxHeight};` : ''}${s.display ? `display:${s.display};` : 'display:block;'}${s.float ? `float:${s.float};` : ''}${makeBorderStyle(s)}${makeRadiusStyle(s)}${makeBackgroundStyle(s)}box-sizing:border-box;`;
+          return wrap(`<img src="${escapeHtml(component.imageUrl || DUMMY_IMAGE_URL)}" alt="${escapeHtml(component.content) || ''}" style="display:block;border:0;outline:none;text-decoration:none;${sizeStyle}" />`);
         }
         case COMPONENT_TYPES.LINK:
-          return wrap(`<a href="${escapeHtml(component.linkUrl) || '#'}" style="${s.display ? `display:${s.display};` : 'display:inline-block;'}${s.float ? `float:${s.float};` : ''}${makeTextStyle({ ...s, textColor: s.linkColor || s.textColor || '#0066cc' })}text-decoration:underline;">${renderRichText(component.content)}</a>`);
+          return wrap(`<a href="${escapeHtml(component.linkUrl || DUMMY_LINK_URL)}" style="${s.display ? `display:${s.display};` : 'display:inline-block;'}${s.float ? `float:${s.float};` : ''}${makeTextStyle({ ...s, textColor: s.linkColor || s.textColor || '#0066cc', textDecoration: s.textDecoration || 'underline' })}">${renderRichText(component.content || 'Visit our placeholder')}</a>`);
         case COMPONENT_TYPES.BUTTON: {
           const buttonBg = s.buttonColor || s.backgroundColor || '#0066cc';
           const buttonText = s.buttonTextColor || s.textColor || '#ffffff';
@@ -430,19 +292,19 @@ const CreateTemplate = () => {
             makeBorderStyle(s),
             makeRadiusStyle({ borderRadius: s.borderRadius || 4 }),
           ].join('');
-          return wrap(`<a href="${escapeHtml(component.linkUrl) || '#'}" target="_blank" style="${buttonStyle}">${renderRichText(component.content || 'Click Me')}</a>`);
+          return wrap(`<a href="${escapeHtml(component.linkUrl || DUMMY_LINK_URL)}" target="_blank" style="${buttonStyle}">${renderRichText(component.content || 'Click Me')}</a>`);
         }
         case COMPONENT_TYPES.SOCIAL_LINK:
-          return wrap(`<a href="${escapeHtml(component.linkUrl) || '#'}" target="_blank" style="${s.display ? `display:${s.display};` : 'display:inline-block;'}${s.float ? `float:${s.float};` : ''}${makeTextStyle({ ...s, textColor: s.linkColor || s.textColor || '#0066cc' })}text-decoration:underline;">${renderRichText(component.content || 'Social Link')}</a>`);
+          return wrap(`<a href="${escapeHtml(component.linkUrl || DUMMY_LINK_URL)}" target="_blank" style="${s.display ? `display:${s.display};` : 'display:inline-block;'}${s.float ? `float:${s.float};` : ''}${makeTextStyle({ ...s, textColor: s.linkColor || s.textColor || '#0066cc', textDecoration: s.textDecoration || 'underline' })}">${renderRichText(component.content || 'Social Link')}</a>`);
         case COMPONENT_TYPES.SOCIAL_ICONS: {
           const urls = (component.socialUrls || '').split('\n').filter(Boolean);
           const icons = urls.map((url) => `<a href="${escapeHtml(url)}" target="_blank" style="display:inline-block;margin:0 4px;"><img src="https://dummyimage.com/32x32/cccccc/000000.png&text=S" alt="social" width="32" height="32" style="display:block;border:0;outline:none;" /></a>`).join('');
           return wrap(`<div style="${s.textAlign ? `text-align:${s.textAlign};` : ''}${makeLayoutStyle(s)}">${icons || '<span>Social Icons</span>'}</div>`);
         }
         case COMPONENT_TYPES.HR:
-          return wrap(`<div style="border-top:1px solid ${s.borderColor || '#cccccc'};font-size:0;line-height:0;">&nbsp;</div>`);
+          return wrap(`<div style="border-top:${Number.isFinite(s.borderWidth) && s.borderWidth > 0 ? s.borderWidth : 1}px ${s.border || 'solid'} ${s.borderColor || '#cccccc'};font-size:0;line-height:0;">&nbsp;</div>`);
         case COMPONENT_TYPES.VIDEO:
-          return wrap(`<a href="${escapeHtml(component.videoUrl) || '#'}" target="_blank"><img src="https://dummyimage.com/600x338/000000/ffffff.png&text=Video" alt="Video" style="display:block;max-width:100%;height:auto;border:0;" /></a>`);
+          return wrap(`<a href="${escapeHtml(component.videoUrl || DUMMY_LINK_URL)}" target="_blank"><img src="https://dummyimage.com/600x338/000000/ffffff.png&text=Video" alt="Video" style="display:block;max-width:100%;height:auto;border:0;" /></a>`);
         case COMPONENT_TYPES.SPACE:
           return makeSpacerTable(component.height || 20);
         case COMPONENT_TYPES.ICON:
@@ -451,7 +313,7 @@ const CreateTemplate = () => {
           return wrap(component.htmlContent || '');
         case COMPONENT_TYPES.MENU: {
           const items = (component.menuItems || component.content || '').split('\n').filter(Boolean);
-          const links = items.map((item) => `<a href="#" style="display:inline-block;padding:0 8px;${makeTextStyle({ ...s, textColor: s.textColor || '#333333' })}text-decoration:none;">${escapeHtml(item)}</a>`).join('');
+          const links = items.map((item) => `<a href="#" style="display:inline-block;padding:0 8px;${makeTextStyle({ ...s, textColor: s.textColor || '#333333', textDecoration: s.textDecoration || 'none' })}">${escapeHtml(item)}</a>`).join('');
           return wrap(`<div style="${s.textAlign ? `text-align:${s.textAlign};` : ''}${makeLayoutStyle(s)}">${links}</div>`);
         }
         case COMPONENT_TYPES.DIV:
@@ -460,7 +322,7 @@ const CreateTemplate = () => {
           return wrap(`<span style="${makeTextStyle(s)}${makeBoxStyle(s, { includeBackground: true, includePadding: true, includeBorder: true, includeRadius: true })}">${renderRichText(component.content)}</span>`);
         case COMPONENT_TYPES.NAV: {
           const items = (component.content || '').split('\n').filter(Boolean);
-          const links = items.map((item) => `<a href="#" style="display:inline-block;padding:0 10px;${makeTextStyle(s)}text-decoration:none;">${escapeHtml(item)}</a>`).join('');
+          const links = items.map((item) => `<a href="#" style="display:inline-block;padding:0 10px;${makeTextStyle({ ...s, textDecoration: s.textDecoration || 'none' })}">${escapeHtml(item)}</a>`).join('');
           return wrap(`<div style="${s.textAlign ? `text-align:${s.textAlign};` : ''}${makeBoxStyle(s, { includeBackground: true, includePadding: true, includeBorder: true, includeRadius: true })}">${links || '<span>Navigation</span>'}</div>`);
         }
         case COMPONENT_TYPES.HEADER:
@@ -475,12 +337,12 @@ const CreateTemplate = () => {
 
     const makeColumnTdStyle = (column) => {
       const s = column?.settings || {};
-      return `${makeBoxStyle(s, { includePadding: true, includeMargin: false, includeText: true, includeBackground: true, includeDimensions: true })}vertical-align:top;`;
+      return `${makeBoxStyle(s, { includePadding: true, includeMargin: false, includeText: true, includeBackground: true, includeDimensions: true, includeDisplay: false, includeFloat: false, includeFlex: false })}vertical-align:top;`;
     };
 
     const makeRowCellStyle = (row) => {
       const s = row?.settings || {};
-      return `${makeBoxStyle(s, { includePadding: true, includeMargin: false, includeText: true, includeBackground: true, includeDimensions: true })}vertical-align:top;`;
+      return `${makeBoxStyle(s, { includePadding: true, includeMargin: false, includeText: true, includeBackground: true, includeDimensions: true, includeDisplay: false, includeFloat: false, includeFlex: false })}vertical-align:top;`;
     };
 
     const bodyVisualStyle = makeBackgroundStyle({
@@ -520,7 +382,7 @@ const CreateTemplate = () => {
             table, td { border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
             img { border: 0; outline: none; text-decoration: none; -ms-interpolation-mode: bicubic; }
             a { text-decoration: none; }
-            @media only screen and (max-width: 620px) {
+            @media only screen and (max-width: 480px) {
               .container { width: 100% !important; }
               .stack-column,
               .stack-column-cell { display: block !important; width: 100% !important; max-width: 100% !important; }
@@ -550,10 +412,10 @@ const CreateTemplate = () => {
                                 const rowCellStyle = makeRowCellStyle(row);
                                 const rowSpacer = Number.isFinite(row?.settings?.margin?.bottom) ? row.settings.margin.bottom : 0;
                                 const rowInner = `
-                                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;table-layout:fixed;width:100%;">
                                     <tr>
                                       <td style="${rowCellStyle}">
-                                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;table-layout:fixed;width:100%;">
                                           <tr>
                                             ${columns
                                               .map((column) => {
@@ -561,7 +423,7 @@ const CreateTemplate = () => {
                                                 const tdStyle = makeColumnTdStyle(column);
                                                 const content = (column.components || []).map((c) => renderComponent(c)).join('');
                                                 return `
-                                                  <td class="stack-column-cell" width="${widthPct}%" style="${tdStyle}">
+                                                  <td class="stack-column-cell" width="${widthPct}%" style="width:${widthPct}%;max-width:${widthPct}%;${tdStyle}">
                                                     ${content}
                                                   </td>
                                                 `;
@@ -597,10 +459,6 @@ const CreateTemplate = () => {
 
     setHtmlContent(html);
   }, [sections, templateSettings]);
-
-  useEffect(() => {
-    setSelectedTarget((prev) => locateTarget(sections, prev));
-  }, [sections]);
 
   useEffect(() => {
     console.log('Sections updated, syncing HTML...'); // Log when sections are updated
@@ -660,67 +518,6 @@ const CreateTemplate = () => {
     }
   };
 
-  const handleTargetUpdate = (updatedTarget) => {
-    if (!updatedTarget) return;
-
-    updateSections((prevSections) => {
-      const updated = [...prevSections];
-
-      if (updatedTarget.kind === 'component') {
-        for (let s = 0; s < updated.length; s++) {
-          const section = updated[s];
-          for (let r = 0; r < section.rows.length; r++) {
-            const row = section.rows[r];
-            for (let c = 0; c < row.columns.length; c++) {
-              const column = row.columns[c];
-              const componentIndex = column.components.findIndex((comp) => comp.id === updatedTarget.id);
-              if (componentIndex !== -1) {
-                updated[s].rows[r].columns[c].components[componentIndex] = {
-                  ...updated[s].rows[r].columns[c].components[componentIndex],
-                  settings: updatedTarget.settings,
-                };
-                return updated;
-              }
-            }
-          }
-        }
-      }
-
-      if (updatedTarget.kind === 'column') {
-        for (let s = 0; s < updated.length; s++) {
-          const section = updated[s];
-          for (let r = 0; r < section.rows.length; r++) {
-            const row = section.rows[r];
-            const columnIndex = row.columns.findIndex((col) => col.id === updatedTarget.id);
-            if (columnIndex !== -1) {
-              updated[s].rows[r].columns[columnIndex] = {
-                ...updated[s].rows[r].columns[columnIndex],
-                settings: updatedTarget.settings,
-              };
-              return updated;
-            }
-          }
-        }
-      }
-
-      if (updatedTarget.kind === 'row') {
-        for (let s = 0; s < updated.length; s++) {
-          const section = updated[s];
-          const rowIndex = section.rows.findIndex((row) => row.id === updatedTarget.id);
-          if (rowIndex !== -1) {
-            updated[s].rows[rowIndex] = {
-              ...updated[s].rows[rowIndex],
-              settings: updatedTarget.settings,
-            };
-            return updated;
-          }
-        }
-      }
-
-      return updated;
-    });
-  };
-
   const editorBodyStyle = {
     backgroundColor: templateSettings.bodyBackgroundColor || 'transparent',
     backgroundImage: templateSettings.bodyBackgroundImage ? `url('${templateSettings.bodyBackgroundImage}')` : undefined,
@@ -770,8 +567,6 @@ const CreateTemplate = () => {
                     <DroppableSection
                       key={section.id}
                       section={section}
-                      setComponents={setSections} // Pass 'setSections' as 'setComponents'
-                      updateSections={updateSections} // Pass updateSections explicitly
                       syncEditorToHtml={syncEditorToHtml} // Pass syncEditorToHtml explicitly
                       onSelect={setSelectedTarget}
                       selectedTarget={selectedTarget}
@@ -797,6 +592,7 @@ const CreateTemplate = () => {
                 <iframe
                   title="email-preview"
                   srcDoc={htmlContent}
+                  sandbox="allow-same-origin"
                   style={{ width: '100%', height: '100%', border: 'none' }}
                 />
               </Box>
@@ -826,7 +622,7 @@ const CreateTemplate = () => {
               selectedTarget={selectedTarget}
               onTargetUpdate={handleTargetUpdate}
               templateSettings={templateSettings}
-              onTemplateSettingsChange={setTemplateSettings}
+              onTemplateSettingsChange={updateTemplateSettings}
             />
           </Box>
         </Box>
@@ -841,21 +637,35 @@ const CreateTemplate = () => {
         {/* Top Center: Editor and Preview Buttons */}
         <Box position="absolute" top="4" left="50%" transform="translateX(-50%)" display="flex" gap="4">
           <IconButton
+            icon={<ArrowBackIcon />}
+            colorScheme={historyPastLength > 0 ? 'orange' : 'gray'}
+            onClick={undo}
+            aria-label="Undo"
+            isDisabled={historyPastLength === 0}
+          />
+          <IconButton
+            icon={<ArrowForwardIcon />}
+            colorScheme={historyFutureLength > 0 ? 'orange' : 'gray'}
+            onClick={redo}
+            aria-label="Redo"
+            isDisabled={historyFutureLength === 0}
+          />
+          <IconButton
             icon={<EditIcon />} // Icon for editor
             colorScheme={isEditorView ? "blue" : "gray"}
-            onClick={() => { setIsEditorView(true); setIsBrowserView(false); }} // Toggle to editor view
+            onClick={() => { setEditorViewMode('editor'); }} // Toggle to editor view
             aria-label="Editor"
           />
           <IconButton
             icon={<SettingsIcon />} // Icon for code preview
             colorScheme={!isEditorView && !isBrowserView ? "green" : "gray"}
-            onClick={() => { setIsEditorView(false); setIsBrowserView(false); }} // Toggle to code preview
+            onClick={() => { setEditorViewMode('code'); }} // Toggle to code preview
             aria-label="Code Preview"
           />
           <IconButton
             icon={<ViewIcon />} // Icon for browser view
             colorScheme={isBrowserView ? "purple" : "gray"}
-            onClick={() => { setIsEditorView(false); setIsBrowserView(true); }} // Toggle to browser view
+            onClick={() => { setEditorViewMode('browser'); }} // Toggle to browser view
             aria-label="Browser View"
           />
         </Box>

@@ -1,6 +1,7 @@
 import React from 'react';
-import { Box, Image, Text } from '@chakra-ui/react';
+import { Box, Text } from '@chakra-ui/react';
 import { COMPONENT_TYPES } from './componentTypes';
+import { DUMMY_IMAGE_URL, DUMMY_LINK_URL } from './componentRegistry';
 
 // Email Components Renderer with Editable Fields
 const updateComponent = (updatedComponent, parentId, rowId, columnId, setSections) => {
@@ -31,6 +32,9 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
   const handleSelect = (e) => {
     if (e?.stopPropagation) {
       e.stopPropagation();
+    }
+    if (e?.preventDefault) {
+      e.preventDefault();
     }
     if (onSelect) {
       onSelect({
@@ -79,7 +83,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
     if (s.border && s.border !== 'none' && s.borderWidth) {
       styles.border = `${s.borderWidth}px ${s.border} ${s.borderColor || '#000'}`;
     }
-    if (s.borderRadius) {
+    if (s.borderRadius || s.borderRadius === 0) {
       styles.borderRadius = `${s.borderRadius}px`;
     }
     if (s.textAlign) {
@@ -97,17 +101,44 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
     if (s.fontWeight) {
       styles.fontWeight = s.fontWeight;
     }
+    if (s.fontStyle) {
+      styles.fontStyle = s.fontStyle;
+    }
+    if (s.textDecoration) {
+      styles.textDecoration = s.textDecoration;
+    }
+    if (s.textTransform) {
+      styles.textTransform = s.textTransform;
+    }
     if (s.lineHeight) {
       styles.lineHeight = s.lineHeight;
     }
     if (s.letterSpacing) {
       styles.letterSpacing = s.letterSpacing;
     }
+    if (s.whiteSpace) {
+      styles.whiteSpace = s.whiteSpace;
+    }
+    if (s.wordBreak) {
+      styles.wordBreak = s.wordBreak;
+    }
     if (s.width) {
       styles.width = s.width;
     }
     if (s.height) {
       styles.height = s.height;
+    }
+    if (s.minWidth) {
+      styles.minWidth = s.minWidth;
+    }
+    if (s.maxWidth) {
+      styles.maxWidth = s.maxWidth;
+    }
+    if (s.minHeight) {
+      styles.minHeight = s.minHeight;
+    }
+    if (s.maxHeight) {
+      styles.maxHeight = s.maxHeight;
     }
     if (s.boxSizing) {
       styles.boxSizing = s.boxSizing;
@@ -117,6 +148,33 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
     }
     if (s.float) {
       styles.float = s.float;
+    }
+    if (s.alignSelf) {
+      styles.alignSelf = s.alignSelf;
+    }
+    if (s.justifyContent) {
+      styles.justifyContent = s.justifyContent;
+    }
+    if (s.alignItems) {
+      styles.alignItems = s.alignItems;
+    }
+    if (s.flexDirection) {
+      styles.flexDirection = s.flexDirection;
+    }
+    if (s.flexWrap) {
+      styles.flexWrap = s.flexWrap;
+    }
+    if (s.overflow) {
+      styles.overflow = s.overflow;
+    }
+    if (s.opacity) {
+      styles.opacity = s.opacity;
+    }
+    if (s.listStyleType) {
+      styles.listStyleType = s.listStyleType;
+    }
+    if (s.listStylePosition) {
+      styles.listStylePosition = s.listStylePosition;
     }
 
     return styles;
@@ -136,10 +194,30 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
       fontFamily: component.settings?.fontFamily || 'inherit',
       fontSize: component.settings?.fontSize || 'inherit',
       fontWeight: component.settings?.fontWeight || 'inherit',
+      fontStyle: component.settings?.fontStyle || 'inherit',
       textAlign: component.settings?.textAlign || 'inherit',
       color: component.settings?.textColor || 'inherit',
+      textDecoration: component.settings?.textDecoration || 'inherit',
+      textTransform: component.settings?.textTransform || 'inherit',
       lineHeight: component.settings?.lineHeight || 'inherit',
       letterSpacing: component.settings?.letterSpacing || 'inherit',
+      whiteSpace: component.settings?.whiteSpace || 'inherit',
+      wordBreak: component.settings?.wordBreak || 'inherit',
+      opacity: component.settings?.opacity || undefined,
+      height: component.settings?.height || undefined,
+      minHeight: component.settings?.minHeight || undefined,
+      maxHeight: component.settings?.maxHeight || undefined,
+      boxSizing: component.settings?.boxSizing || 'border-box',
+    };
+
+    const blockFillStyle = {
+      width: component.settings?.width || componentStyles.width || '100%',
+      minWidth: component.settings?.minWidth || componentStyles.minWidth || undefined,
+      maxWidth: component.settings?.maxWidth || componentStyles.maxWidth || undefined,
+      height: component.settings?.height || '100%',
+      minHeight: component.settings?.minHeight || undefined,
+      maxHeight: component.settings?.maxHeight || undefined,
+      boxSizing: component.settings?.boxSizing || 'border-box',
     };
 
     switch (type) {
@@ -186,7 +264,13 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                 style={textEditorStyle}
               />
             ) : (
-              <Box as="span" whiteSpace="pre-wrap">{content || 'This is a text block'}</Box>
+              <Box
+                as="span"
+                whiteSpace="pre-wrap"
+                onClick={handleSelect}
+              >
+                {content || 'This is a text block'}
+              </Box>
             )}
           </Box>
         );
@@ -206,7 +290,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
         );
       case COMPONENT_TYPES.ORDERED_LIST:
         return (
-          <ol onClick={handleSelect} style={componentStyles}>
+          <ol onClick={handleSelect} style={{ paddingLeft: componentStyles.paddingLeft ? componentStyles.paddingLeft : undefined, ...componentStyles }}>
             {isSelected ? (
               <textarea
                 value={content || '1. Item 1\n2. Item 2'}
@@ -222,7 +306,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
         );
       case COMPONENT_TYPES.UNORDERED_LIST:
         return (
-          <ul onClick={handleSelect} style={componentStyles}>
+          <ul onClick={handleSelect} style={{ paddingLeft: componentStyles.paddingLeft ? componentStyles.paddingLeft : undefined, ...componentStyles }}>
             {isSelected ? (
               <textarea
                 value={content || '- Item 1\n- Item 2'}
@@ -289,25 +373,46 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
         const imageStyles = {
           textAlign: component.settings?.textAlign || componentStyles.textAlign || 'center',
           backgroundColor: componentStyles.backgroundColor,
-          margin: 0,
+          backgroundImage: componentStyles.backgroundImage,
+          backgroundSize: componentStyles.backgroundSize,
+          backgroundPosition: componentStyles.backgroundPosition,
+          backgroundRepeat: componentStyles.backgroundRepeat,
+          border: componentStyles.border,
+          borderRadius: componentStyles.borderRadius,
+          boxSizing: componentStyles.boxSizing,
+          width: componentStyles.width || '100%',
+          minWidth: componentStyles.minWidth,
+          maxWidth: componentStyles.maxWidth,
+          minHeight: componentStyles.minHeight,
+          maxHeight: componentStyles.maxHeight,
+          height: componentStyles.height,
+          margin: componentStyles.margin || 0,
           padding: 0,
           display: component.settings?.display || componentStyles.display,
           float: component.settings?.float || componentStyles.float,
+          alignSelf: component.settings?.alignSelf || componentStyles.alignSelf,
+          overflow: componentStyles.overflow,
         };
         return (
-          <Box onClick={handleSelect} style={{ width: '100%', ...imageStyles }}>
+          <Box onClick={handleSelect} style={imageStyles}>
             <img
-              src={component.imageUrl || 'https://dummyimage.com/100x50/cccccc/000000.png'}
-              alt="Image"
+              src={component.imageUrl || DUMMY_IMAGE_URL}
+              alt={component.content || ''}
               style={{
-                width: component.settings?.width || 'auto',
-                height: component.settings?.height || 'auto',
-                maxWidth: '100%',
+                width: component.settings?.width || componentStyles.width || 'auto',
+                height: component.settings?.height || componentStyles.height || 'auto',
+                maxWidth: component.settings?.maxWidth || '100%',
+                minWidth: component.settings?.minWidth || undefined,
+                minHeight: component.settings?.minHeight || undefined,
+                maxHeight: component.settings?.maxHeight || undefined,
                 display: component.settings?.display || 'inline-block',
-                border: 'none',
+                border: componentStyles.border || 'none',
+                borderRadius: componentStyles.borderRadius || undefined,
+                backgroundColor: componentStyles.backgroundColor || undefined,
                 margin: 0,
                 padding: 0,
                 boxSizing: 'border-box',
+                objectFit: component.settings?.height || component.settings?.minHeight || component.settings?.maxHeight ? 'cover' : undefined,
               }}
             />
             {isSelected && (
@@ -325,21 +430,26 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
         return (
           <Box
             as="a"
-            href={component.linkUrl || 'https://example.com'}
+            href={component.linkUrl || DUMMY_LINK_URL}
             onClick={handleSelect}
-            style={{ ...componentStyles, color: component.settings?.linkColor || '#0066cc', textDecoration: 'underline', cursor: 'pointer' }}
+            style={{
+              ...componentStyles,
+              color: component.settings?.linkColor || component.settings?.textColor || '#0066cc',
+              textDecoration: component.settings?.textDecoration || componentStyles.textDecoration || 'underline',
+              cursor: 'pointer'
+            }}
           >
             {isSelected ? (
               <input
                 type="text"
-                value={content || 'Visit our site'}
+                value={content || 'Visit our placeholder'}
                 onChange={handleChange}
                 style={{
                   ...textEditorStyle,
                   color: component.settings?.linkColor || '#0066cc',
                 }}
               />
-            ) : (content || 'Visit our site')}
+            ) : (content || 'Visit our placeholder')}
           </Box>
         );
       case COMPONENT_TYPES.HEADING:
@@ -359,7 +469,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
           </Box>
         );
       case COMPONENT_TYPES.HR:
-        return <Box as="hr" onClick={handleSelect} style={{ border: 'none', borderTop: `1px solid ${component.settings?.borderColor || '#cccccc'}`, margin: 0, ...componentStyles }} />;
+        return <Box as="hr" onClick={handleSelect} style={{ border: 'none', borderTop: `${component.settings?.borderWidth || 1}px ${component.settings?.border || 'solid'} ${component.settings?.borderColor || '#cccccc'}`, margin: 0, ...componentStyles }} />;
       case COMPONENT_TYPES.VIDEO:
         return (
           <Box onClick={handleSelect} p={4} border="1px dashed" borderColor="red.300" borderRadius="md" style={componentStyles}>
@@ -516,8 +626,6 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
             style={{
               border: isSelected ? '1px dashed #3182ce' : '1px solid transparent',
               outline: 'none',
-              minHeight: '10px',
-              width: '100%',
               transition: 'border 0.2s ease',
               ...componentStyles
             }}
@@ -527,10 +635,10 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
               <textarea
                 value={content || 'Empty Div Content'}
                 onChange={handleChange}
-                style={{ ...textEditorStyle, minHeight: '60px' }}
+                style={{ ...textEditorStyle, ...blockFillStyle }}
               />
             ) : (
-              <Box as="div" whiteSpace="pre-wrap" width="100%">{content || 'Empty Div Content'}</Box>
+              <Box as="div" whiteSpace="pre-wrap" style={blockFillStyle}>{content || 'Empty Div Content'}</Box>
             )}
           </Box>
         );
@@ -546,8 +654,6 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
             onClick={handleSelect}
             style={{
               border: isSelected ? '1px dashed #3182ce' : '1px solid rgba(0,0,0,0.05)',
-              minHeight: '40px',
-              width: '100%',
               position: 'relative',
               ...componentStyles
             }}
@@ -568,10 +674,10 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
               <textarea
                 value={content || `Empty ${label} Content`}
                 onChange={handleChange}
-                style={{ ...textEditorStyle, minHeight: '80px' }}
+                style={{ ...textEditorStyle, ...blockFillStyle }}
               />
             ) : (
-              <Box as="div" p={2} whiteSpace="pre-wrap" width="100%">{content || `Empty ${label} Content`}</Box>
+              <Box as="div" p={2} whiteSpace="pre-wrap" style={blockFillStyle}>{content || `Empty ${label} Content`}</Box>
             )}
           </Box>
         );

@@ -1,5 +1,8 @@
 import { COMPONENT_TYPES } from './componentTypes';
 
+export const DUMMY_IMAGE_URL = 'https://dummyimage.com/600x400/cccccc/000000.png&text=Placeholder';
+export const DUMMY_LINK_URL = 'https://dummyimage.com';
+
 export const COMPONENT_LIBRARY = [
   {
     type: COMPONENT_TYPES.TEXT,
@@ -46,7 +49,7 @@ export const COMPONENT_LIBRARY = [
     title: 'Image',
     defaults: {
       content: 'Default Image',
-      imageUrl: 'https://dummyimage.com/100x50/cccccc/000000.png',
+      imageUrl: DUMMY_IMAGE_URL,
     },
   },
   {
@@ -54,7 +57,7 @@ export const COMPONENT_LIBRARY = [
     title: 'Button',
     defaults: {
       content: 'Click Me',
-      linkUrl: 'https://example.com',
+      linkUrl: DUMMY_LINK_URL,
     },
   },
   {
@@ -62,7 +65,7 @@ export const COMPONENT_LIBRARY = [
     title: 'Link',
     defaults: {
       content: 'Default Link',
-      linkUrl: 'https://example.com',
+      linkUrl: DUMMY_LINK_URL,
     },
   },
   {
@@ -70,7 +73,7 @@ export const COMPONENT_LIBRARY = [
     title: 'Social Link',
     defaults: {
       content: 'Facebook',
-      linkUrl: 'https://example.com',
+      linkUrl: DUMMY_LINK_URL,
     },
   },
   {
@@ -88,7 +91,7 @@ export const COMPONENT_LIBRARY = [
   {
     type: COMPONENT_TYPES.VIDEO,
     title: 'Video',
-    defaults: { videoUrl: 'https://example.com/video.mp4', content: 'Default Video' },
+    defaults: { videoUrl: DUMMY_LINK_URL, content: 'Default Video' },
   },
   {
     type: COMPONENT_TYPES.TABLE,

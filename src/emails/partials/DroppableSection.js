@@ -6,9 +6,13 @@ import { sectionStyle } from './componentStyles';
 import DroppableRow from './DroppableRow';
 import { moveRow } from './DroppableRow';
 import { COMPONENT_TYPES } from './componentTypes';
+import { useEditorStore } from '../editorStore';
 
 // Droppable Section Component
-const DroppableSection = ({ section, setComponents, updateSections, syncEditorToHtml, onSelect, selectedTarget }) => {
+const DroppableSection = ({ section, syncEditorToHtml, onSelect, selectedTarget }) => {
+  const addRowToSection = useEditorStore((state) => state.addRowToSection);
+  const removeSectionById = useEditorStore((state) => state.removeSection);
+
   const addRow = () => {
     const newRow = {
       id: Date.now(),
@@ -75,16 +79,11 @@ const DroppableSection = ({ section, setComponents, updateSections, syncEditorTo
         },
       ],
     };
-    updateSections((prevSections) => {
-      const updated = [...prevSections];
-      const sectionIndex = updated.findIndex((s) => s.id === section.id);
-      updated[sectionIndex].rows.push(newRow);
-      return updated;
-    });
+    addRowToSection(section.id, newRow);
   };
 
   const removeSection = () => {
-    setComponents((prevSections) => prevSections.filter((s) => s.id !== section.id));
+    removeSectionById(section.id);
   };
 
   const [{ isOver }, drop] = useDrop({
@@ -132,13 +131,8 @@ const DroppableSection = ({ section, setComponents, updateSections, syncEditorTo
             }
           }))
         };
-        
-        updateSections((prevSections) => {
-          const updated = [...prevSections];
-          const sectionIndex = updated.findIndex((s) => s.id === section.id);
-          updated[sectionIndex].rows.push(newRow);
-          return updated;
-        });
+
+        addRowToSection(section.id, newRow);
         
         // Ensure HTML is synchronized after the drop event
         if (typeof syncEditorToHtml === 'function') {
@@ -164,11 +158,9 @@ const DroppableSection = ({ section, setComponents, updateSections, syncEditorTo
         <DroppableRow
           key={row.id}
           row={row}
-          setComponents={setComponents}
           parentId={section.id}
           index={index}
           moveRow={moveRow}
-          updateSections={updateSections}
           syncEditorToHtml={syncEditorToHtml} // Pass syncEditorToHtml explicitly
           onSelect={onSelect}
           selectedTarget={selectedTarget}

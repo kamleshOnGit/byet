@@ -1,8 +1,14 @@
 import React from 'react';
-import { Button, Text, Image, Link, Heading, Divider } from '@chakra-ui/react';
-import { AddIcon } from '@chakra-ui/icons';
+import { Button, Text, Image, Heading, Divider } from '@chakra-ui/react';
+import { AddIcon, AttachmentIcon, ChevronDownIcon, DragHandleIcon, ExternalLinkIcon, HamburgerIcon, InfoIcon, MinusIcon, RepeatIcon, SearchIcon, StarIcon } from '@chakra-ui/icons';
 import { useDrag } from 'react-dnd';
 import { COMPONENT_TYPES } from './componentTypes';
+
+const CodeBadge = ({ label, color }) => (
+  <Text fontSize="xs" fontWeight="bold" color={color} letterSpacing="0.08em">
+    {label}
+  </Text>
+);
 
 // Draggable Component
 const DraggableComponent = ({ definition }) => {
@@ -26,11 +32,11 @@ const DraggableComponent = ({ definition }) => {
       case COMPONENT_TYPES.IMAGE:
         return <Image src="https://dummyimage.com/40x40/cccccc/000000.png" alt="Image Icon" boxSize={8} />; // Icon for Image
       case COMPONENT_TYPES.LINK:
-        return <Link fontSize="lg" color="purple.500">🔗</Link>; // Icon for Link
+        return <ExternalLinkIcon boxSize={6} color="purple.500" />;
       case COMPONENT_TYPES.SOCIAL_LINK:
-        return <Link fontSize="lg" color="blue.500">@</Link>; // Icon for Social Link
+        return <AttachmentIcon boxSize={6} color="blue.500" />;
       case COMPONENT_TYPES.SOCIAL_ICONS:
-        return <Text fontSize="lg" color="blue.500">📱</Text>; // Icon for Social Icons
+        return <RepeatIcon boxSize={6} color="blue.500" />;
       case COMPONENT_TYPES.HEADING:
         return <Heading size="sm" color="orange.500">H</Heading>; // Icon for Heading
       case COMPONENT_TYPES.HR:
@@ -38,9 +44,9 @@ const DraggableComponent = ({ definition }) => {
       case COMPONENT_TYPES.PARAGRAPH:
         return <Text fontSize="lg" fontWeight="bold" color="green.500">P</Text>; // Icon for Paragraph
       case COMPONENT_TYPES.ORDERED_LIST:
-        return <Text fontSize="lg" fontWeight="bold" color="brown.500">1.</Text>; // Icon for Ordered List
+        return <Text fontSize="lg" fontWeight="bold" color="orange.700">1.</Text>;
       case COMPONENT_TYPES.UNORDERED_LIST:
-        return <Text fontSize="lg" fontWeight="bold" color="gray.500">•</Text>; // Icon for Unordered List
+        return <Text fontSize="lg" fontWeight="bold" color="gray.500">≡</Text>;
       case COMPONENT_TYPES.HEADER_1:
         return <Heading size="lg" color="blue.500">H1</Heading>; // Icon for H1
       case COMPONENT_TYPES.HEADER_2:
@@ -48,31 +54,31 @@ const DraggableComponent = ({ definition }) => {
       case COMPONENT_TYPES.HEADER_3:
         return <Heading size="sm" color="orange.500">H3</Heading>; // Icon for H3
       case COMPONENT_TYPES.VIDEO:
-        return <Text fontSize="lg" color="red.500">▶</Text>; // Icon for Video
+        return <ChevronDownIcon boxSize={6} color="red.500" transform="rotate(-90deg)" />;
       case COMPONENT_TYPES.TABLE:
-        return <Text fontSize="lg" color="purple.500">▦</Text>; // Icon for Table
+        return <DragHandleIcon boxSize={6} color="purple.500" transform="rotate(90deg)" />;
       case COMPONENT_TYPES.SPACE:
-        return <Text fontSize="lg" color="gray.500">␣</Text>; // Icon for Space
+        return <MinusIcon boxSize={6} color="gray.500" />;
       case COMPONENT_TYPES.ICON:
-        return <Text fontSize="lg" color="yellow.500">★</Text>; // Icon for Icon
+        return <StarIcon boxSize={6} color="yellow.500" />;
       case COMPONENT_TYPES.HTML:
-        return <Text fontSize="lg" color="orange.500">{'<>'}</Text>; // Icon for HTML
+        return <CodeBadge color="orange.500" label="<>" />;
       case COMPONENT_TYPES.MENU:
-        return <Text fontSize="lg" color="teal.500">☰</Text>; // Icon for Menu
+        return <HamburgerIcon boxSize={6} color="teal.500" />;
       case COMPONENT_TYPES.DIV:
-        return <Text fontSize="lg" fontWeight="bold" color="cyan.500">{"[ ]"}</Text>; // Icon for Div
+        return <CodeBadge color="cyan.500" label="DIV" />;
       case COMPONENT_TYPES.SPAN:
-        return <Text fontSize="lg" fontWeight="bold" color="pink.500">{"<S>"}</Text>; // Icon for Span
+        return <CodeBadge color="pink.500" label="SPAN" />;
       case COMPONENT_TYPES.NAV:
-        return <Text fontSize="lg" color="blue.400">🧭</Text>; // Icon for Nav
+        return <SearchIcon boxSize={5} color="blue.400" />;
       case COMPONENT_TYPES.HEADER:
-        return <Text fontSize="lg" color="orange.400">顶部</Text>; // Icon for Header
+        return <CodeBadge color="orange.400" label="HDR" />;
       case COMPONENT_TYPES.FOOTER:
-        return <Text fontSize="lg" color="gray.400">底部</Text>; // Icon for Footer
+        return <CodeBadge color="gray.500" label="FTR" />;
       case COMPONENT_TYPES.SIDEBAR:
-        return <Text fontSize="lg" color="purple.400">侧边</Text>; // Icon for Sidebar
+        return <CodeBadge color="purple.400" label="SB" />;
       case COMPONENT_TYPES.BANNER:
-        return <Text fontSize="lg" color="red.400">🖼️</Text>; // Icon for Banner
+        return <InfoIcon boxSize={6} color="red.400" />;
       default:
         return null; // Remove unknown elements
     }

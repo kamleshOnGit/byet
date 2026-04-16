@@ -13,6 +13,11 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
     fontFamily: '',
     textAlign: '',
     textColor: '',
+    textDecoration: '',
+    textTransform: '',
+    fontStyle: '',
+    whiteSpace: '',
+    wordBreak: '',
 
     // Background
     backgroundColor: 'transparent',
@@ -24,6 +29,10 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
     // Dimensions
     width: '',
     height: '',
+    minWidth: '',
+    maxWidth: '',
+    minHeight: '',
+    maxHeight: '',
 
     // Border
     border: 'none',
@@ -39,6 +48,13 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
     boxSizing: 'border-box',
     display: '',
     float: '',
+    alignSelf: '',
+    justifyContent: '',
+    alignItems: '',
+    flexDirection: '',
+    flexWrap: '',
+    overflow: '',
+    opacity: '',
 
     // Link specific
     linkColor: '',
@@ -49,6 +65,7 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
 
     // List specific
     listStyleType: 'disc',
+    listStylePosition: '',
   });
 
   const normalizeColorValue = (value, fallback = '#000000') => {
@@ -127,6 +144,11 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
         fontFamily: '',
         textAlign: '',
         textColor: '',
+        textDecoration: '',
+        textTransform: '',
+        fontStyle: '',
+        whiteSpace: '',
+        wordBreak: '',
         backgroundColor: 'transparent',
         backgroundImage: '',
         backgroundSize: 'cover',
@@ -134,6 +156,10 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
         backgroundRepeat: 'no-repeat',
         width: '',
         height: '',
+        minWidth: '',
+        maxWidth: '',
+        minHeight: '',
+        maxHeight: '',
         border: 'none',
         borderColor: '#000000',
         borderWidth: 0,
@@ -143,10 +169,18 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
         boxSizing: 'border-box',
         display: '',
         float: '',
+        alignSelf: '',
+        justifyContent: '',
+        alignItems: '',
+        flexDirection: '',
+        flexWrap: '',
+        overflow: '',
+        opacity: '',
         linkColor: '',
         buttonColor: '',
         buttonTextColor: '',
         listStyleType: 'disc',
+        listStylePosition: '',
         // Then override with target settings
         ...selectedTarget.data.settings
       });
@@ -400,6 +434,242 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
             ) : (
               <>
 
+                {/* Component Specific Settings */}
+                {selectedTarget.kind === 'component' && selectedTarget.data?.type === 'Button' && (
+                  <>
+                    <Text fontSize="md" fontWeight="semibold" mb={2}>Button Settings</Text>
+                    {renderColorField('Button Color', 'buttonColor', '#0066cc / rgba(...)', '#0066cc')}
+                    {renderColorField('Button Text Color', 'buttonTextColor', '#ffffff / inherit', '#ffffff')}
+                    <Divider my={4} />
+                  </>
+                )}
+
+                {selectedTarget.kind === 'component' && selectedTarget.data?.type === 'Link' && (
+                  <>
+                    <Text fontSize="md" fontWeight="semibold" mb={2}>Link Settings</Text>
+                    {renderColorField('Link Color', 'linkColor', '#0066cc / inherit', '#0066cc')}
+                    <Divider my={4} />
+                  </>
+                )}
+
+                {/* Dimensions */}
+                {showDimensions && (
+                  <>
+                    <Text fontSize="md" fontWeight="semibold" mb={2}>Dimensions</Text>
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Width</Text>
+                      <Input
+                        value={settings.width}
+                        onChange={(e) => handleSettingChange('width', e.target.value)}
+                        size="sm"
+                      />
+                    </Box>
+
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Height</Text>
+                      <Input
+                        value={settings.height}
+                        onChange={(e) => handleSettingChange('height', e.target.value)}
+                        size="sm"
+                      />
+                    </Box>
+
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Min Width</Text>
+                      <Input
+                        value={settings.minWidth}
+                        onChange={(e) => handleSettingChange('minWidth', e.target.value)}
+                        size="sm"
+                        placeholder="120px / 50%"
+                      />
+                    </Box>
+
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Max Width</Text>
+                      <Input
+                        value={settings.maxWidth}
+                        onChange={(e) => handleSettingChange('maxWidth', e.target.value)}
+                        size="sm"
+                        placeholder="600px / 100%"
+                      />
+                    </Box>
+
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Min Height</Text>
+                      <Input
+                        value={settings.minHeight}
+                        onChange={(e) => handleSettingChange('minHeight', e.target.value)}
+                        size="sm"
+                        placeholder="40px"
+                      />
+                    </Box>
+
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Max Height</Text>
+                      <Input
+                        value={settings.maxHeight}
+                        onChange={(e) => handleSettingChange('maxHeight', e.target.value)}
+                        size="sm"
+                        placeholder="300px"
+                      />
+                    </Box>
+
+                    <Divider my={4} />
+                  </>
+                )}
+
+                {/* Layout */}
+                {showLayout && (
+                  <>
+                    <Text fontSize="md" fontWeight="semibold" mb={2}>Layout</Text>
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Display</Text>
+                      <Select
+                        value={settings.display}
+                        onChange={(e) => handleSettingChange('display', e.target.value)}
+                        size="sm"
+                      >
+                        <option value="">Default</option>
+                        <option value="block">Block</option>
+                        <option value="inline-block">Inline Block</option>
+                        <option value="inline">Inline</option>
+                        <option value="flex">Flex</option>
+                      </Select>
+                    </Box>
+
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Align Self</Text>
+                      <Select
+                        value={settings.alignSelf}
+                        onChange={(e) => handleSettingChange('alignSelf', e.target.value)}
+                        size="sm"
+                      >
+                        <option value="">Default</option>
+                        <option value="auto">Auto</option>
+                        <option value="stretch">Stretch</option>
+                        <option value="flex-start">Flex Start</option>
+                        <option value="center">Center</option>
+                        <option value="flex-end">Flex End</option>
+                        <option value="baseline">Baseline</option>
+                      </Select>
+                    </Box>
+
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Justify Content</Text>
+                      <Select
+                        value={settings.justifyContent}
+                        onChange={(e) => handleSettingChange('justifyContent', e.target.value)}
+                        size="sm"
+                      >
+                        <option value="">Default</option>
+                        <option value="flex-start">Flex Start</option>
+                        <option value="center">Center</option>
+                        <option value="flex-end">Flex End</option>
+                        <option value="space-between">Space Between</option>
+                        <option value="space-around">Space Around</option>
+                        <option value="space-evenly">Space Evenly</option>
+                      </Select>
+                    </Box>
+
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Align Items</Text>
+                      <Select
+                        value={settings.alignItems}
+                        onChange={(e) => handleSettingChange('alignItems', e.target.value)}
+                        size="sm"
+                      >
+                        <option value="">Default</option>
+                        <option value="stretch">Stretch</option>
+                        <option value="flex-start">Flex Start</option>
+                        <option value="center">Center</option>
+                        <option value="flex-end">Flex End</option>
+                      </Select>
+                    </Box>
+
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Flex Direction</Text>
+                      <Select
+                        value={settings.flexDirection}
+                        onChange={(e) => handleSettingChange('flexDirection', e.target.value)}
+                        size="sm"
+                      >
+                        <option value="">Default</option>
+                        <option value="row">Row</option>
+                        <option value="column">Column</option>
+                        <option value="row-reverse">Row Reverse</option>
+                        <option value="column-reverse">Column Reverse</option>
+                      </Select>
+                    </Box>
+
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Flex Wrap</Text>
+                      <Select
+                        value={settings.flexWrap}
+                        onChange={(e) => handleSettingChange('flexWrap', e.target.value)}
+                        size="sm"
+                      >
+                        <option value="">Default</option>
+                        <option value="nowrap">No Wrap</option>
+                        <option value="wrap">Wrap</option>
+                        <option value="wrap-reverse">Wrap Reverse</option>
+                      </Select>
+                    </Box>
+
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Float</Text>
+                      <Select
+                        value={settings.float}
+                        onChange={(e) => handleSettingChange('float', e.target.value)}
+                        size="sm"
+                      >
+                        <option value="">Default</option>
+                        <option value="left">Left</option>
+                        <option value="right">Right</option>
+                        <option value="none">None</option>
+                      </Select>
+                    </Box>
+
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Overflow</Text>
+                      <Select
+                        value={settings.overflow}
+                        onChange={(e) => handleSettingChange('overflow', e.target.value)}
+                        size="sm"
+                      >
+                        <option value="">Default</option>
+                        <option value="visible">Visible</option>
+                        <option value="hidden">Hidden</option>
+                        <option value="auto">Auto</option>
+                        <option value="scroll">Scroll</option>
+                      </Select>
+                    </Box>
+
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Opacity</Text>
+                      <Input
+                        value={settings.opacity}
+                        onChange={(e) => handleSettingChange('opacity', e.target.value)}
+                        size="sm"
+                        placeholder="1 / 0.5"
+                      />
+                    </Box>
+
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Box Sizing</Text>
+                      <Select
+                        value={settings.boxSizing}
+                        onChange={(e) => handleSettingChange('boxSizing', e.target.value)}
+                        size="sm"
+                      >
+                        <option value="border-box">Border Box</option>
+                        <option value="content-box">Content Box</option>
+                      </Select>
+                    </Box>
+
+                    <Divider my={4} />
+                  </>
+                )}
+
                 {/* Padding Settings */}
                 {showPadding && (
                   <>
@@ -551,6 +821,50 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                       </Select>
                     </Box>
 
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Text Decoration</Text>
+                      <Select
+                        value={settings.textDecoration}
+                        onChange={(e) => handleSettingChange('textDecoration', e.target.value)}
+                        size="sm"
+                      >
+                        <option value="">Default</option>
+                        <option value="none">None</option>
+                        <option value="underline">Underline</option>
+                        <option value="overline">Overline</option>
+                        <option value="line-through">Line Through</option>
+                      </Select>
+                    </Box>
+
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Text Transform</Text>
+                      <Select
+                        value={settings.textTransform}
+                        onChange={(e) => handleSettingChange('textTransform', e.target.value)}
+                        size="sm"
+                      >
+                        <option value="">Default</option>
+                        <option value="none">None</option>
+                        <option value="uppercase">Uppercase</option>
+                        <option value="lowercase">Lowercase</option>
+                        <option value="capitalize">Capitalize</option>
+                      </Select>
+                    </Box>
+
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Font Style</Text>
+                      <Select
+                        value={settings.fontStyle}
+                        onChange={(e) => handleSettingChange('fontStyle', e.target.value)}
+                        size="sm"
+                      >
+                        <option value="">Default</option>
+                        <option value="normal">Normal</option>
+                        <option value="italic">Italic</option>
+                        <option value="oblique">Oblique</option>
+                      </Select>
+                    </Box>
+
                     {renderColorField('Text Color', 'textColor', '#000000 / rgb(...) / inherit', '#000000')}
 
                     <Divider my={4} />
@@ -575,6 +889,19 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                         <option value="upper-alpha">Upper Alpha</option>
                         <option value="lower-roman">Lower Roman</option>
                         <option value="upper-roman">Upper Roman</option>
+                      </Select>
+                    </Box>
+
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>List Style Position</Text>
+                      <Select
+                        value={settings.listStylePosition}
+                        onChange={(e) => handleSettingChange('listStylePosition', e.target.value)}
+                        size="sm"
+                      >
+                        <option value="">Default</option>
+                        <option value="outside">Outside</option>
+                        <option value="inside">Inside</option>
                       </Select>
                     </Box>
                     <Divider my={4} />
@@ -624,32 +951,6 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                         onChange={(e) => handleSettingChange('backgroundRepeat', e.target.value)}
                         size="sm"
                         placeholder="no-repeat / repeat / repeat-x"
-                      />
-                    </Box>
-
-                    <Divider my={4} />
-                  </>
-                )}
-
-                {/* Dimensions */}
-                {showDimensions && (
-                  <>
-                    <Text fontSize="md" fontWeight="semibold" mb={2}>Dimensions</Text>
-                    <Box mb={3}>
-                      <Text fontSize="xs" mb={1}>Width</Text>
-                      <Input
-                        value={settings.width}
-                        onChange={(e) => handleSettingChange('width', e.target.value)}
-                        size="sm"
-                      />
-                    </Box>
-
-                    <Box mb={3}>
-                      <Text fontSize="xs" mb={1}>Height</Text>
-                      <Input
-                        value={settings.height}
-                        onChange={(e) => handleSettingChange('height', e.target.value)}
-                        size="sm"
                       />
                     </Box>
 
@@ -738,72 +1039,38 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                       />
                     </Box>
 
-                    <Divider my={4} />
-                  </>
-                )}
-
-                {/* Layout */}
-                {showLayout && (
-                  <>
-                    <Text fontSize="md" fontWeight="semibold" mb={2}>Layout</Text>
                     <Box mb={3}>
-                      <Text fontSize="xs" mb={1}>Box Sizing</Text>
+                      <Text fontSize="xs" mb={1}>White Space</Text>
                       <Select
-                        value={settings.boxSizing}
-                        onChange={(e) => handleSettingChange('boxSizing', e.target.value)}
+                        value={settings.whiteSpace}
+                        onChange={(e) => handleSettingChange('whiteSpace', e.target.value)}
                         size="sm"
                       >
-                        <option value="border-box">Border Box</option>
-                        <option value="content-box">Content Box</option>
+                        <option value="">Default</option>
+                        <option value="normal">Normal</option>
+                        <option value="nowrap">No Wrap</option>
+                        <option value="pre">Pre</option>
+                        <option value="pre-wrap">Pre Wrap</option>
+                        <option value="pre-line">Pre Line</option>
                       </Select>
                     </Box>
 
                     <Box mb={3}>
-                      <Text fontSize="xs" mb={1}>Display</Text>
+                      <Text fontSize="xs" mb={1}>Word Break</Text>
                       <Select
-                        value={settings.display}
-                        onChange={(e) => handleSettingChange('display', e.target.value)}
+                        value={settings.wordBreak}
+                        onChange={(e) => handleSettingChange('wordBreak', e.target.value)}
                         size="sm"
                       >
                         <option value="">Default</option>
-                        <option value="block">Block</option>
-                        <option value="inline-block">Inline Block</option>
-                        <option value="inline">Inline</option>
-                        <option value="flex">Flex</option>
-                      </Select>
-                    </Box>
-
-                    <Box mb={3}>
-                      <Text fontSize="xs" mb={1}>Float</Text>
-                      <Select
-                        value={settings.float}
-                        onChange={(e) => handleSettingChange('float', e.target.value)}
-                        size="sm"
-                      >
-                        <option value="">Default</option>
-                        <option value="left">Left</option>
-                        <option value="right">Right</option>
-                        <option value="none">None</option>
+                        <option value="normal">Normal</option>
+                        <option value="break-word">Break Word</option>
+                        <option value="break-all">Break All</option>
+                        <option value="keep-all">Keep All</option>
                       </Select>
                     </Box>
 
                     <Divider my={4} />
-                  </>
-                )}
-
-                {/* Component Specific Settings */}
-                {selectedTarget.kind === 'component' && selectedTarget.data?.type === 'Button' && (
-                  <>
-                    <Text fontSize="md" fontWeight="semibold" mb={2}>Button Settings</Text>
-                    {renderColorField('Button Color', 'buttonColor', '#0066cc / rgba(...)', '#0066cc')}
-                    {renderColorField('Button Text Color', 'buttonTextColor', '#ffffff / inherit', '#ffffff')}
-                  </>
-                )}
-
-                {selectedTarget.kind === 'component' && selectedTarget.data?.type === 'Link' && (
-                  <>
-                    <Text fontSize="md" fontWeight="semibold" mb={2}>Link Settings</Text>
-                    {renderColorField('Link Color', 'linkColor', '#0066cc / inherit', '#0066cc')}
                   </>
                 )}
 
@@ -821,6 +1088,11 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                       fontFamily: '',
                       textAlign: '',
                       textColor: '',
+                      textDecoration: '',
+                      textTransform: '',
+                      fontStyle: '',
+                      whiteSpace: '',
+                      wordBreak: '',
                       backgroundColor: 'transparent',
                       backgroundImage: '',
                       backgroundSize: 'cover',
@@ -828,6 +1100,10 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                       backgroundRepeat: 'no-repeat',
                       width: '',
                       height: '',
+                      minWidth: '',
+                      maxWidth: '',
+                      minHeight: '',
+                      maxHeight: '',
                       border: 'none',
                       borderColor: '#000000',
                       borderWidth: 0,
@@ -837,10 +1113,18 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                       boxSizing: 'border-box',
                       display: '',
                       float: '',
+                      alignSelf: '',
+                      justifyContent: '',
+                      alignItems: '',
+                      flexDirection: '',
+                      flexWrap: '',
+                      overflow: '',
+                      opacity: '',
                       linkColor: '',
                       buttonColor: '',
                       buttonTextColor: '',
                       listStyleType: 'disc',
+                      listStylePosition: '',
                     };
                     setSettings(defaultSettings);
 

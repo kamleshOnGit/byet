@@ -5,25 +5,16 @@ import { COMPONENT_TYPES } from './componentTypes';
 import { columnParentStyle } from './componentStyles';
 import DraggableComponentInColumn from './DraggableComponentInColumn';
 import { createComponentInstance } from './componentRegistry';
+import { useEditorStore } from '../editorStore';
 
-const DroppableColumn = ({ column, colSpan, parentId, rowId, updateSections, syncEditorToHtml, onSelect, selectedTarget }) => {
+const DroppableColumn = ({ column, colSpan, parentId, rowId, syncEditorToHtml, onSelect, selectedTarget }) => {
+  const addComponentToColumn = useEditorStore((state) => state.addComponentToColumn);
+
   const [, drop] = useDrop({
     accept: Object.values(COMPONENT_TYPES),
     drop: (item) => {
       const newComponent = createComponentInstance(item.type);
-      updateSections((prevSections) => {
-        const updated = [...prevSections];
-        const sectionIndex = updated.findIndex((s) => s.id === parentId);
-        const rowIndex = updated[sectionIndex].rows.findIndex((r) => r.id === rowId);
-        const columnIndex = updated[sectionIndex].rows[rowIndex].columns.findIndex((c) => c.id === column.id);
-
-        if (!updated[sectionIndex].rows[rowIndex].columns[columnIndex].components) {
-          updated[sectionIndex].rows[rowIndex].columns[columnIndex].components = [];
-        }
-
-        updated[sectionIndex].rows[rowIndex].columns[columnIndex].components.push(newComponent);
-        return updated;
-      });
+      addComponentToColumn(parentId, rowId, column.id, newComponent);
 
       // Ensure HTML is synchronized after the drop event
       if (typeof syncEditorToHtml === 'function') {
@@ -80,7 +71,7 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, updateSections, syn
     if (s.border && s.border !== 'none' && s.borderWidth) {
       out.border = `${s.borderWidth}px ${s.border} ${s.borderColor || '#000000'}`;
     }
-    if (s.borderRadius) {
+    if (s.borderRadius || s.borderRadius === 0) {
       out.borderRadius = `${s.borderRadius}px`;
     }
     if (s.textAlign) {
@@ -95,14 +86,41 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, updateSections, syn
     if (s.float) {
       out.float = s.float;
     }
+    if (s.alignSelf) {
+      out.alignSelf = s.alignSelf;
+    }
+    if (s.justifyContent) {
+      out.justifyContent = s.justifyContent;
+    }
+    if (s.alignItems) {
+      out.alignItems = s.alignItems;
+    }
+    if (s.flexDirection) {
+      out.flexDirection = s.flexDirection;
+    }
+    if (s.flexWrap) {
+      out.flexWrap = s.flexWrap;
+    }
+    if (s.overflow) {
+      out.overflow = s.overflow;
+    }
     if (s.width) {
       out.width = s.width;
+    }
+    if (s.minWidth) {
+      out.minWidth = s.minWidth;
+    }
+    if (s.maxWidth) {
+      out.maxWidth = s.maxWidth;
     }
     if (s.height) {
       out.height = s.height;
     }
     if (s.minHeight) {
       out.minHeight = s.minHeight;
+    }
+    if (s.maxHeight) {
+      out.maxHeight = s.maxHeight;
     }
     if (s.color) {
       out.color = s.color;
@@ -138,12 +156,10 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, updateSections, syn
         outline: isSelected ? '2px solid #3182ce' : 'none',
         display: column?.settings?.display || 'flex',
         flexDirection: column?.settings?.flexDirection || 'column',
-        height: '100%',
-        minHeight: 'min-content',
         flex: '1 0 auto',
         justifyContent: column?.settings?.justifyContent || 'flex-start',
         alignItems: column?.settings?.alignItems || (column?.settings?.textAlign === 'center' ? 'center' : (column?.settings?.textAlign === 'right' ? 'flex-end' : 'stretch')),
-        overflow: 'visible',
+        overflow: column?.settings?.overflow || 'visible',
       }}
     >
       {isSelected && <Box position="absolute" top="2px" right="6px" fontSize="xs" color="gray.500" zIndex={1}>{column.label}</Box>}
@@ -156,7 +172,6 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, updateSections, syn
             columnId={column.id}
             parentId={parentId}
             rowId={rowId}
-            updateSections={updateSections}
             onSelect={onSelect}
             selectedTarget={selectedTarget}
           />

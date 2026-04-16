@@ -2,8 +2,12 @@ import React from 'react';
 import { Box } from '@chakra-ui/react';
 import { useDrag, useDrop } from 'react-dnd';
 import EmailComponent from './EmailComponent';
+import { useEditorStore } from '../editorStore';
 
-const DraggableComponentInColumn = ({ component, index, columnId, parentId, rowId, updateSections, onSelect, selectedTarget }) => {
+const DraggableComponentInColumn = ({ component, index, columnId, parentId, rowId, onSelect, selectedTarget }) => {
+  const reorderComponentsInColumn = useEditorStore((state) => state.reorderComponentsInColumn);
+  const updateSections = useEditorStore((state) => state.updateSections);
+
   const [, drag] = useDrag({
     type: 'COMPONENT',
     item: { index },
@@ -13,18 +17,7 @@ const DraggableComponentInColumn = ({ component, index, columnId, parentId, rowI
     accept: 'COMPONENT',
     hover: (item) => {
       if (item.index !== index) {
-        updateSections((prevSections) => {
-          const updated = [...prevSections];
-          const sectionIndex = updated.findIndex((s) => s.id === parentId);
-          const rowIndex = updated[sectionIndex].rows.findIndex((r) => r.id === rowId);
-          const columnIndex = updated[sectionIndex].rows[rowIndex].columns.findIndex((c) => c.id === columnId);
-
-          const components = updated[sectionIndex].rows[rowIndex].columns[columnIndex].components;
-          const [draggedComponent] = components.splice(item.index, 1);
-          components.splice(index, 0, draggedComponent);
-
-          return updated;
-        });
+        reorderComponentsInColumn(parentId, rowId, columnId, item.index, index);
         item.index = index;
       }
     },
@@ -44,6 +37,8 @@ const DraggableComponentInColumn = ({ component, index, columnId, parentId, rowI
         cursor: 'grab',
         outline: isSelected ? '2px solid #3182ce' : 'none',
         boxShadow: 'none',
+        width: 'fit-content',
+        maxWidth: '100%',
       }}
     >
       <EmailComponent

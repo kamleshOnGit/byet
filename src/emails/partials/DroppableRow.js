@@ -4,33 +4,18 @@ import { DragHandleIcon, AddIcon, DeleteIcon } from '@chakra-ui/icons';
 import { useDrag, useDrop } from 'react-dnd';
 import { rowStyle } from './componentStyles';
 import DroppableColumn from './DroppableColumn';
+import { useEditorStore } from '../editorStore';
 
 // Utility Functions
-const removeRow = (row, setComponents, parentId) => {
-  setComponents((prevSections) => {
-    const updated = [...prevSections];
-    const sectionIndex = updated.findIndex((s) => s.id === parentId);
-    updated[sectionIndex].rows = updated[sectionIndex].rows.filter((r) => r.id !== row.id);
-    return updated;
-  });
-};
-
-const moveRow = (dragIndex, hoverIndex, setComponents) => {
-  setComponents((prevSections) => {
-    const updated = [...prevSections];
-
-    updated.forEach((section) => {
-      const rows = section.rows;
-      const [draggedRow] = rows.splice(dragIndex, 1);
-      rows.splice(hoverIndex, 0, draggedRow);
-    });
-
-    return updated;
-  });
+const moveRow = (dragIndex, hoverIndex, moveRowInStore) => {
+  moveRowInStore(dragIndex, hoverIndex);
 };
 
 // Droppable Row Component
-const DroppableRow = ({ row, setComponents, parentId, index, moveRow, updateSections, syncEditorToHtml, onSelect, selectedTarget }) => {
+const DroppableRow = ({ row, parentId, index, moveRow, syncEditorToHtml, onSelect, selectedTarget }) => {
+  const duplicateRowInStore = useEditorStore((state) => state.duplicateRow);
+  const removeRowInStore = useEditorStore((state) => state.removeRow);
+  const moveRowInStore = useEditorStore((state) => state.moveRow);
 
   const [, drag] = useDrag({
     type: 'ROW',
@@ -41,7 +26,7 @@ const DroppableRow = ({ row, setComponents, parentId, index, moveRow, updateSect
     accept: 'ROW',
     hover: (item) => {
       if (item.index !== index) {
-        moveRow(item.index, index, setComponents);
+        moveRow(item.index, index, moveRowInStore);
         item.index = index;
       }
     },
@@ -49,26 +34,7 @@ const DroppableRow = ({ row, setComponents, parentId, index, moveRow, updateSect
 
   // Function to duplicate the row
   const duplicateRow = () => {
-    const newRow = {
-      id: Date.now(),
-      settings: { ...(row.settings || {}) },
-      columns: row.columns.map(col => ({
-        ...col,
-        id: Date.now() + Math.random(),
-        components: col.components.map(comp => ({
-          ...comp,
-          id: Date.now() + Math.random()
-        }))
-      }))
-    };
-    
-    updateSections((prevSections) => {
-      const updated = [...prevSections];
-      const sectionIndex = updated.findIndex((s) => s.id === parentId);
-      const rowIndex = updated[sectionIndex].rows.findIndex((r) => r.id === row.id);
-      updated[sectionIndex].rows.splice(rowIndex + 1, 0, newRow);
-      return updated;
-    });
+    duplicateRowInStore(parentId, row);
   };
 
   const isSelected = selectedTarget?.kind === 'row' && selectedTarget?.id === row.id;
@@ -210,11 +176,9 @@ const DroppableRow = ({ row, setComponents, parentId, index, moveRow, updateSect
         <DroppableColumn
           key={col.id}
           column={col}
-          setComponents={setComponents}
           colSpan={col.size}
           parentId={parentId}
           rowId={row.id}
-          updateSections={updateSections}
           syncEditorToHtml={syncEditorToHtml} // Pass syncEditorToHtml explicitly
           onSelect={onSelect}
           selectedTarget={selectedTarget}
@@ -234,7 +198,7 @@ const DroppableRow = ({ row, setComponents, parentId, index, moveRow, updateSect
         <IconButton
           onClick={(e) => {
             e.stopPropagation();
-            removeRow(row, setComponents, parentId);
+            removeRowInStore(parentId, row.id);
           }}
           colorScheme="red"
           size="xs"
