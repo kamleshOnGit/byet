@@ -515,6 +515,61 @@ export const useEditorStore = create((set, get) => ({
     return sections;
   }),
 
+  removeTableRow: (tableComponentId, tableRowId) => get().updateSections((sections) => {
+    for (const section of sections) {
+      for (const row of section.rows || []) {
+        for (const column of row.columns || []) {
+          const didUpdate = updateComponentRecursive(column.components || [], tableComponentId, (component) => {
+            const tableRows = component.tableRows || [];
+            if (tableRows.length <= 1) {
+              return component;
+            }
+            return {
+              ...component,
+              tableRows: tableRows.filter((tableRow) => tableRow.id !== tableRowId),
+            };
+          });
+          if (didUpdate) {
+            return sections;
+          }
+        }
+      }
+    }
+    return sections;
+  }),
+
+  removeTableCell: (tableComponentId, tableRowId, tableCellId) => get().updateSections((sections) => {
+    for (const section of sections) {
+      for (const row of section.rows || []) {
+        for (const column of row.columns || []) {
+          const didUpdate = updateComponentRecursive(column.components || [], tableComponentId, (component) => ({
+            ...component,
+            tableRows: (component.tableRows || []).map((tableRow) => {
+              if (tableRow.id !== tableRowId) return tableRow;
+              const currentCells = tableRow.cells || [];
+              if (currentCells.length <= 1) {
+                return tableRow;
+              }
+              const nextCells = currentCells.filter((cell) => cell.id !== tableCellId);
+              const width = `${Math.floor(100 / (nextCells.length || 1))}%`;
+              return {
+                ...tableRow,
+                cells: nextCells.map((cell) => ({
+                  ...cell,
+                  width: cell.settings?.width || cell.width || width,
+                })),
+              };
+            }),
+          }));
+          if (didUpdate) {
+            return sections;
+          }
+        }
+      }
+    }
+    return sections;
+  }),
+
   addComponentToTableCell: (tableComponentId, tableRowId, tableCellId, component) => get().updateSections((sections) => {
     for (const section of sections) {
       for (const row of section.rows || []) {
@@ -535,6 +590,22 @@ export const useEditorStore = create((set, get) => ({
               };
             }),
           }))) return sections;
+        }
+      }
+    }
+    return sections;
+  }),
+
+  updateComponentData: (componentId, updater) => get().updateSections((sections) => {
+    for (const section of sections) {
+      for (const row of section.rows || []) {
+        for (const column of row.columns || []) {
+          if (updateComponentRecursive(column.components || [], componentId, (component) => {
+            const nextComponent = typeof updater === 'function' ? updater(component) : updater;
+            return deepClone(nextComponent);
+          })) {
+            return sections;
+          }
         }
       }
     }

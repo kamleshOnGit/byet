@@ -9,6 +9,7 @@ import { useEditorStore } from '../editorStore';
 const TableCellDropZone = ({ tableId, tableRowId, cell, parentId, rowId, columnId, onSelect, selectedTarget, cellStyle }) => {
   const addComponentToTableCell = useEditorStore((state) => state.addComponentToTableCell);
   const updateSections = useEditorStore((state) => state.updateSections);
+  const cellSettings = cell?.settings || {};
 
   const [{ isOver }, drop] = useDrop(() => ({
     accept: Object.values(COMPONENT_TYPES),
@@ -25,22 +26,21 @@ const TableCellDropZone = ({ tableId, tableRowId, cell, parentId, rowId, columnI
     }),
   }), [addComponentToTableCell, tableId, tableRowId, cell.id]);
 
-  const isCellSelected = selectedTarget?.kind === 'tableCell' && selectedTarget?.id === cell.id;
-
-  const handleSelectCell = (e) => {
-    e.stopPropagation();
-    onSelect?.({ kind: 'tableCell', id: cell.id, tableComponentId: tableId, tableRowId, data: cell });
-  };
-
   return (
     <Box
       ref={drop}
-      onClick={handleSelectCell}
       style={{
         ...cellStyle,
-        outline: isCellSelected ? '2px solid #805ad5' : (isOver ? '2px dashed #805ad5' : '1px dashed rgba(128,90,213,0.25)'),
+        outline: isOver ? '2px dashed #805ad5' : '1px dashed rgba(128,90,213,0.25)',
         minHeight: '48px',
         verticalAlign: 'top',
+        backgroundColor: cellSettings.backgroundColor && cellSettings.backgroundColor !== 'transparent' ? cellSettings.backgroundColor : undefined,
+        textAlign: cellSettings.textAlign || undefined,
+        color: cellSettings.textColor || undefined,
+        fontSize: cellSettings.fontSize || undefined,
+        fontWeight: cellSettings.fontWeight || undefined,
+        fontFamily: cellSettings.fontFamily || undefined,
+        lineHeight: cellSettings.lineHeight || undefined,
       }}
     >
       {(cell.components || []).map((nestedComponent) => (
@@ -62,33 +62,20 @@ const TableCellDropZone = ({ tableId, tableRowId, cell, parentId, rowId, columnI
   );
 };
 
-// Email Components Renderer with Editable Fields
-const updateComponent = (updatedComponent, parentId, rowId, columnId, setSections) => {
-  setSections((prevSections) => {
-    const updated = [...prevSections];
-    const sectionIndex = updated.findIndex((s) => s.id === parentId);
-    const rowIndex = updated[sectionIndex].rows.findIndex((r) => r.id === rowId);
-    const columnIndex = updated[sectionIndex].rows[rowIndex].columns.findIndex((c) => c.id === columnId);
-
-    const components = updated[sectionIndex].rows[rowIndex].columns[columnIndex].components;
-    const componentIndex = components.findIndex((comp) => comp.id === updatedComponent.id);
-    components[componentIndex] = updatedComponent;
-
-    return updated;
-  });
-};
-
 const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onSelect, selectedTarget }) => {
   const { type, content } = component;
   const addTableRow = useEditorStore((state) => state.addTableRow);
   const addTableCell = useEditorStore((state) => state.addTableCell);
+  const removeTableRow = useEditorStore((state) => state.removeTableRow);
+  const removeTableCell = useEditorStore((state) => state.removeTableCell);
   const removeComponent = useEditorStore((state) => state.removeComponent);
+  const updateComponentData = useEditorStore((state) => state.updateComponentData);
 
   const handleChange = (nextValue) => {
     const updatedComponent = (nextValue && typeof nextValue === 'object' && nextValue.target)
       ? { ...component, content: nextValue.target.value || '' }
       : (nextValue && typeof nextValue === 'object' ? nextValue : { ...component, content: nextValue || '' });
-    updateComponent(updatedComponent, parentId, rowId, columnId, setSections);
+    updateComponentData(component.id, updatedComponent);
   };
 
   const handleSelect = (e) => {
@@ -316,6 +303,8 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                 type="text"
                 value={content || 'Click Me'}
                 onChange={handleChange}
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
                 style={{
                   ...textEditorStyle,
                   width: 'auto',
@@ -576,21 +565,50 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                       e.stopPropagation();
                       onSelect?.({ kind: 'tableRow', id: tableRow.id, tableComponentId: component.id, data: tableRow });
                     }}
-                    style={{ outline: selectedTarget?.kind === 'tableRow' && selectedTarget?.id === tableRow.id ? '2px solid #9f7aea' : 'none' }}
+                    style={{
+                      outline: selectedTarget?.kind === 'tableRow' && selectedTarget?.id === tableRow.id ? '2px solid #9f7aea' : 'none',
+                      height: tableRow.settings?.height || undefined,
+                      backgroundColor: tableRow.settings?.backgroundColor && tableRow.settings?.backgroundColor !== 'transparent' ? tableRow.settings.backgroundColor : undefined,
+                    }}
                   >
                     {(tableRow.cells || []).map((cell) => (
                       <Box
                         as="td"
                         key={cell.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelect?.({ kind: 'tableCell', id: cell.id, tableComponentId: component.id, tableRowId: tableRow.id, data: cell });
+                        }}
                         width={cell.settings?.width || cell.width || `${Math.floor(100 / ((tableRow.cells || []).length || 1))}%`}
                         p={2}
-                        border="1px solid"
-                        borderColor="purple.100"
+                        border={cell.settings?.border && cell.settings?.border !== 'none' && cell.settings?.borderWidth ? `${cell.settings.borderWidth}px ${cell.settings.border} ${cell.settings.borderColor || '#000000'}` : '1px solid'}
+                        borderColor={cell.settings?.border && cell.settings?.border !== 'none' && cell.settings?.borderWidth ? undefined : 'purple.100'}
                         verticalAlign={cell.settings?.verticalAlign || 'top'}
                         colSpan={cell.colSpan || 1}
                         rowSpan={cell.rowSpan || 1}
+                        outline={selectedTarget?.kind === 'tableCell' && selectedTarget?.id === cell.id ? '2px solid #805ad5' : undefined}
                         backgroundColor={cell.settings?.backgroundColor && cell.settings?.backgroundColor !== 'transparent' ? cell.settings.backgroundColor : undefined}
+                        textAlign={cell.settings?.textAlign || undefined}
+                        color={cell.settings?.textColor || undefined}
+                        fontSize={cell.settings?.fontSize || undefined}
+                        fontWeight={cell.settings?.fontWeight || undefined}
+                        fontFamily={cell.settings?.fontFamily || undefined}
+                        height={cell.settings?.height || undefined}
+                        minHeight={cell.settings?.minHeight || undefined}
                       >
+                        {selectedTarget?.kind === 'tableCell' && selectedTarget?.id === cell.id && (tableRow.cells || []).length > 1 && (
+                          <IconButton
+                            aria-label="Remove table cell"
+                            size="xs"
+                            colorScheme="red"
+                            icon={<DeleteIcon />}
+                            mb={2}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeTableCell(component.id, tableRow.id, cell.id);
+                            }}
+                          />
+                        )}
                         <TableCellDropZone
                           tableId={component.id}
                           tableRowId={tableRow.id}
@@ -606,7 +624,12 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                     ))}
                     {isSelected && (
                       <Box as="td" width="1%" p={2} verticalAlign="top">
-                        <IconButton aria-label="Add table cell" size="xs" variant="ghost" colorScheme="purple" icon={<AddIcon />} onClick={(e) => { e.stopPropagation(); addTableCell(component.id, tableRow.id); }} />
+                        <Box display="flex" flexDirection="column" gap={2}>
+                          <IconButton aria-label="Add table cell" size="xs" variant="ghost" colorScheme="purple" icon={<AddIcon />} onClick={(e) => { e.stopPropagation(); addTableCell(component.id, tableRow.id); }} />
+                          {(component.tableRows || []).length > 1 && (
+                            <IconButton aria-label="Remove table row" size="xs" variant="ghost" colorScheme="red" icon={<DeleteIcon />} onClick={(e) => { e.stopPropagation(); removeTableRow(component.id, tableRow.id); }} />
+                          )}
+                        </Box>
                       </Box>
                     )}
                   </Box>
