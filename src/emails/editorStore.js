@@ -69,7 +69,7 @@ const createDefaultSections = () => {
           id: rowId,
           settings: {
             ...createDefaultRowSettings(),
-            backgroundColor: '#ffffff',
+            backgroundColor: 'transparent',
             borderColor: '#dddddd',
           },
           columns: [
@@ -79,7 +79,7 @@ const createDefaultSections = () => {
               size: 6,
               settings: {
                 ...createDefaultColumnSettings(),
-                backgroundColor: '#ffffff',
+                backgroundColor: 'transparent',
               },
               components: [
                 {
@@ -93,7 +93,7 @@ const createDefaultSections = () => {
                     fontWeight: 'normal',
                     textAlign: 'left',
                     textColor: '#000000',
-                    backgroundColor: '#ffffff',
+                    backgroundColor: 'transparent',
                     border: 'none',
                   },
                 },
@@ -105,7 +105,7 @@ const createDefaultSections = () => {
               size: 6,
               settings: {
                 ...createDefaultColumnSettings(),
-                backgroundColor: '#ffffff',
+                backgroundColor: 'transparent',
               },
               components: [
                 {
@@ -139,6 +139,101 @@ const createDefaultSections = () => {
 
 const deepClone = (value) => JSON.parse(JSON.stringify(value));
 
+const findComponentRecursive = (components, id) => {
+  for (const component of components || []) {
+    if (component.id === id) return component;
+    for (const tableRow of component.tableRows || []) {
+      const found = findComponentRecursive((tableRow.cells || []).flatMap((cell) => cell.components || []), id);
+      if (found) return found;
+    }
+  }
+  return null;
+};
+
+const findTableNodeRecursive = (components, kind, id, tableComponentId = null) => {
+  for (const component of components || []) {
+    if (kind === 'table' && component.id === id && component.type === COMPONENT_TYPES.TABLE) {
+      return { data: component, tableComponentId: component.id };
+    }
+    for (const tableRow of component.tableRows || []) {
+      if (kind === 'tableRow' && tableRow.id === id) {
+        return { data: tableRow, tableComponentId: component.id };
+      }
+      for (const cell of tableRow.cells || []) {
+        if (kind === 'tableCell' && cell.id === id) {
+          return { data: cell, tableComponentId: component.id, tableRowId: tableRow.id };
+        }
+      }
+      const foundInCells = findTableNodeRecursive((tableRow.cells || []).flatMap((cell) => cell.components || []), kind, id, component.id);
+      if (foundInCells) return foundInCells;
+    }
+  }
+  return null;
+};
+
+const updateTableNodeRecursive = (components, kind, id, updater) => {
+  for (let index = 0; index < (components || []).length; index += 1) {
+    const component = components[index];
+    if (kind === 'table' && component.id === id && component.type === COMPONENT_TYPES.TABLE) {
+      components[index] = updater(component);
+      return true;
+    }
+    for (const tableRow of component.tableRows || []) {
+      if (kind === 'tableRow' && tableRow.id === id) {
+        Object.assign(tableRow, updater(tableRow));
+        return true;
+      }
+      for (let cellIndex = 0; cellIndex < (tableRow.cells || []).length; cellIndex += 1) {
+        const cell = tableRow.cells[cellIndex];
+        if (kind === 'tableCell' && cell.id === id) {
+          tableRow.cells[cellIndex] = updater(cell);
+          return true;
+        }
+      }
+      if (updateTableNodeRecursive((tableRow.cells || []).flatMap((cell) => cell.components || []), kind, id, updater)) {
+        return true;
+      }
+    }
+  }
+  return false;
+};
+
+const updateComponentRecursive = (components, id, updater) => {
+  for (let index = 0; index < (components || []).length; index += 1) {
+    const component = components[index];
+    if (component.id === id) {
+      components[index] = updater(component);
+      return true;
+    }
+    for (const tableRow of component.tableRows || []) {
+      for (const cell of tableRow.cells || []) {
+        if (updateComponentRecursive(cell.components || [], id, updater)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+};
+
+const removeComponentRecursive = (components, id) => {
+  const directIndex = (components || []).findIndex((component) => component.id === id);
+  if (directIndex !== -1) {
+    components.splice(directIndex, 1);
+    return true;
+  }
+  for (const component of components || []) {
+    for (const tableRow of component.tableRows || []) {
+      for (const cell of tableRow.cells || []) {
+        if (removeComponentRecursive(cell.components || [], id)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+};
+
 const buildInitialTarget = (sections) => {
   const section = sections?.[0];
   const row = section?.rows?.[0];
@@ -163,8 +258,14 @@ const locateTarget = (sections, target) => {
       if (kind === 'row' && row.id === id) return { ...target, sectionId: section.id, data: row };
       for (const column of row.columns || []) {
         if (kind === 'column' && column.id === id) return { ...target, sectionId: section.id, rowId: row.id, data: column };
+        if (kind === 'table' || kind === 'tableRow' || kind === 'tableCell') {
+          const tableNode = findTableNodeRecursive(column.components || [], kind, id);
+          if (tableNode) {
+            return { ...target, sectionId: section.id, rowId: row.id, columnId: column.id, ...tableNode };
+          }
+        }
         if (kind === 'component') {
-          const found = (column.components || []).find((comp) => comp.id === id);
+          const found = findComponentRecursive(column.components || [], id);
           if (found) {
             return { ...target, sectionId: section.id, rowId: row.id, columnId: column.id, data: found };
           }
@@ -365,9 +466,92 @@ export const useEditorStore = create((set, get) => ({
     const location = findColumnLocation(sections, parentId, rowId, columnId);
     if (!location) return sections;
     const components = sections[location.sectionIndex].rows[location.rowIndex].columns[location.columnIndex].components || [];
-    const componentIndex = components.findIndex((component) => component.id === updatedComponent.id);
-    if (componentIndex === -1) return sections;
-    components[componentIndex] = deepClone(updatedComponent);
+    if (!updateComponentRecursive(components, updatedComponent.id, () => deepClone(updatedComponent))) return sections;
+  }),
+
+  addTableRow: (tableComponentId) => get().updateSections((sections) => {
+    for (const section of sections) {
+      for (const row of section.rows || []) {
+        for (const column of row.columns || []) {
+          if (updateComponentRecursive(column.components || [], tableComponentId, (component) => ({
+            ...component,
+            tableRows: [
+              ...(component.tableRows || []),
+              {
+                id: createId(),
+                settings: {},
+                cells: [
+                  { id: createId(), width: '50%', colSpan: 1, rowSpan: 1, settings: {}, components: [] },
+                  { id: createId(), width: '50%', colSpan: 1, rowSpan: 1, settings: {}, components: [] },
+                ],
+              },
+            ],
+          }))) return sections;
+        }
+      }
+    }
+    return sections;
+  }),
+
+  addTableCell: (tableComponentId, tableRowId) => get().updateSections((sections) => {
+    for (const section of sections) {
+      for (const row of section.rows || []) {
+        for (const column of row.columns || []) {
+          if (updateComponentRecursive(column.components || [], tableComponentId, (component) => ({
+            ...component,
+            tableRows: (component.tableRows || []).map((tableRow) => {
+              if (tableRow.id !== tableRowId) return tableRow;
+              const nextCells = [...(tableRow.cells || []), { id: createId(), width: '', colSpan: 1, rowSpan: 1, settings: {}, components: [] }];
+              const width = `${Math.floor(100 / nextCells.length)}%`;
+              return {
+                ...tableRow,
+                cells: nextCells.map((cell) => ({ ...cell, width: cell.width || width })),
+              };
+            }),
+          }))) return sections;
+        }
+      }
+    }
+    return sections;
+  }),
+
+  addComponentToTableCell: (tableComponentId, tableRowId, tableCellId, component) => get().updateSections((sections) => {
+    for (const section of sections) {
+      for (const row of section.rows || []) {
+        for (const column of row.columns || []) {
+          if (updateComponentRecursive(column.components || [], tableComponentId, (tableComponent) => ({
+            ...tableComponent,
+            tableRows: (tableComponent.tableRows || []).map((tableRow) => {
+              if (tableRow.id !== tableRowId) return tableRow;
+              return {
+                ...tableRow,
+                cells: (tableRow.cells || []).map((cell) => {
+                  if (cell.id !== tableCellId) return cell;
+                  return {
+                    ...cell,
+                    components: [...(cell.components || []), deepClone(component)],
+                  };
+                }),
+              };
+            }),
+          }))) return sections;
+        }
+      }
+    }
+    return sections;
+  }),
+
+  removeComponent: (componentId) => get().updateSections((sections) => {
+    for (const section of sections) {
+      for (const row of section.rows || []) {
+        for (const column of row.columns || []) {
+          if (removeComponentRecursive(column.components || [], componentId)) {
+            return sections;
+          }
+        }
+      }
+    }
+    return sections;
   }),
 
   updateTargetSettings: (updatedTarget) => get().updateSections((sections) => {
@@ -376,12 +560,55 @@ export const useEditorStore = create((set, get) => ({
       for (const section of sections) {
         for (const row of section.rows || []) {
           for (const column of row.columns || []) {
-            const componentIndex = (column.components || []).findIndex((component) => component.id === updatedTarget.id);
-            if (componentIndex !== -1) {
-              column.components[componentIndex] = {
-                ...column.components[componentIndex],
-                settings: deepClone(updatedTarget.settings),
-              };
+            if (updateComponentRecursive(column.components || [], updatedTarget.id, (component) => ({
+              ...component,
+              settings: deepClone(updatedTarget.settings),
+            }))) {
+              return sections;
+            }
+          }
+        }
+      }
+    }
+    if (updatedTarget.kind === 'table') {
+      for (const section of sections) {
+        for (const row of section.rows || []) {
+          for (const column of row.columns || []) {
+            if (updateTableNodeRecursive(column.components || [], 'table', updatedTarget.id, (tableComponent) => ({
+              ...tableComponent,
+              settings: deepClone(updatedTarget.settings),
+            }))) {
+              return sections;
+            }
+          }
+        }
+      }
+    }
+    if (updatedTarget.kind === 'tableRow') {
+      for (const section of sections) {
+        for (const row of section.rows || []) {
+          for (const column of row.columns || []) {
+            if (updateTableNodeRecursive(column.components || [], 'tableRow', updatedTarget.id, (tableRow) => ({
+              ...tableRow,
+              settings: deepClone(updatedTarget.settings),
+            }))) {
+              return sections;
+            }
+          }
+        }
+      }
+    }
+    if (updatedTarget.kind === 'tableCell') {
+      for (const section of sections) {
+        for (const row of section.rows || []) {
+          for (const column of row.columns || []) {
+            if (updateTableNodeRecursive(column.components || [], 'tableCell', updatedTarget.id, (tableCell) => ({
+              ...tableCell,
+              width: updatedTarget.settings?.width ?? tableCell.width,
+              colSpan: updatedTarget.settings?.colSpan ?? tableCell.colSpan,
+              rowSpan: updatedTarget.settings?.rowSpan ?? tableCell.rowSpan,
+              settings: deepClone(updatedTarget.settings),
+            }))) {
               return sections;
             }
           }

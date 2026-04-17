@@ -1,7 +1,66 @@
 import React from 'react';
-import { Box, Text } from '@chakra-ui/react';
+import { Box, Text, Button, IconButton } from '@chakra-ui/react';
+import { AddIcon, DeleteIcon } from '@chakra-ui/icons';
+import { useDrop } from 'react-dnd';
 import { COMPONENT_TYPES } from './componentTypes';
-import { DUMMY_IMAGE_URL, DUMMY_LINK_URL } from './componentRegistry';
+import { createComponentInstance, DUMMY_IMAGE_URL, DUMMY_LINK_URL } from './componentRegistry';
+import { useEditorStore } from '../editorStore';
+
+const TableCellDropZone = ({ tableId, tableRowId, cell, parentId, rowId, columnId, onSelect, selectedTarget, cellStyle }) => {
+  const addComponentToTableCell = useEditorStore((state) => state.addComponentToTableCell);
+  const updateSections = useEditorStore((state) => state.updateSections);
+
+  const [{ isOver }, drop] = useDrop(() => ({
+    accept: Object.values(COMPONENT_TYPES),
+    drop: (item, monitor) => {
+      if (monitor.didDrop()) {
+        return undefined;
+      }
+      const newComponent = createComponentInstance(item.type);
+      addComponentToTableCell(tableId, tableRowId, cell.id, newComponent);
+      return { droppedInTableCell: true };
+    },
+    collect: (monitor) => ({
+      isOver: monitor.isOver(),
+    }),
+  }), [addComponentToTableCell, tableId, tableRowId, cell.id]);
+
+  const isCellSelected = selectedTarget?.kind === 'tableCell' && selectedTarget?.id === cell.id;
+
+  const handleSelectCell = (e) => {
+    e.stopPropagation();
+    onSelect?.({ kind: 'tableCell', id: cell.id, tableComponentId: tableId, tableRowId, data: cell });
+  };
+
+  return (
+    <Box
+      ref={drop}
+      onClick={handleSelectCell}
+      style={{
+        ...cellStyle,
+        outline: isCellSelected ? '2px solid #805ad5' : (isOver ? '2px dashed #805ad5' : '1px dashed rgba(128,90,213,0.25)'),
+        minHeight: '48px',
+        verticalAlign: 'top',
+      }}
+    >
+      {(cell.components || []).map((nestedComponent) => (
+        <EmailComponent
+          key={nestedComponent.id}
+          component={nestedComponent}
+          setSections={updateSections}
+          parentId={parentId}
+          rowId={rowId}
+          columnId={columnId}
+          onSelect={onSelect}
+          selectedTarget={selectedTarget}
+        />
+      ))}
+      {(!cell.components || cell.components.length === 0) && (
+        <Text fontSize="xs" color="gray.400">Drop component here</Text>
+      )}
+    </Box>
+  );
+};
 
 // Email Components Renderer with Editable Fields
 const updateComponent = (updatedComponent, parentId, rowId, columnId, setSections) => {
@@ -21,6 +80,9 @@ const updateComponent = (updatedComponent, parentId, rowId, columnId, setSection
 
 const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onSelect, selectedTarget }) => {
   const { type, content } = component;
+  const addTableRow = useEditorStore((state) => state.addTableRow);
+  const addTableCell = useEditorStore((state) => state.addTableCell);
+  const removeComponent = useEditorStore((state) => state.removeComponent);
 
   const handleChange = (nextValue) => {
     const updatedComponent = (nextValue && typeof nextValue === 'object' && nextValue.target)
@@ -46,6 +108,16 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
   };
 
   const isSelected = selectedTarget?.kind === 'component' && selectedTarget?.id === component.id;
+
+  const handleRemove = (e) => {
+    if (e?.stopPropagation) {
+      e.stopPropagation();
+    }
+    if (e?.preventDefault) {
+      e.preventDefault();
+    }
+    removeComponent(component.id);
+  };
 
   // Apply styles from component settings
   const applyComponentStyles = () => {
@@ -488,15 +560,59 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
       case COMPONENT_TYPES.TABLE:
         return (
           <Box onClick={handleSelect} p={4} border="1px dashed" borderColor="purple.300" borderRadius="md" style={componentStyles}>
-            <Box as="span" style={{ color: '#805AD5', fontWeight: 'bold' }}>▦ Table Placeholder</Box>
-            {isSelected && (
-              <textarea
-                placeholder="Table content (CSV format)"
-                value={component.tableData || 'Header 1,Header 2,Header 3\nRow 1 Col 1,Row 1 Col 2,Row 1 Col 3\nRow 2 Col 1,Row 2 Col 2,Row 2 Col 3'}
-                onChange={(e) => handleChange({ ...component, tableData: e.target.value })}
-                style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px', minHeight: '80px' }}
-              />
-            )}
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+              <Box as="span" style={{ color: '#805AD5', fontWeight: 'bold' }}>▦ Table</Box>
+              {isSelected && (
+                <IconButton aria-label="Add table row" size="xs" colorScheme="purple" icon={<AddIcon />} onClick={(e) => { e.stopPropagation(); addTableRow(component.id); }} />
+              )}
+            </Box>
+            <Box as="table" width="100%" borderCollapse="collapse">
+              <Box as="tbody">
+                {(component.tableRows || []).map((tableRow) => (
+                  <Box
+                    as="tr"
+                    key={tableRow.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelect?.({ kind: 'tableRow', id: tableRow.id, tableComponentId: component.id, data: tableRow });
+                    }}
+                    style={{ outline: selectedTarget?.kind === 'tableRow' && selectedTarget?.id === tableRow.id ? '2px solid #9f7aea' : 'none' }}
+                  >
+                    {(tableRow.cells || []).map((cell) => (
+                      <Box
+                        as="td"
+                        key={cell.id}
+                        width={cell.settings?.width || cell.width || `${Math.floor(100 / ((tableRow.cells || []).length || 1))}%`}
+                        p={2}
+                        border="1px solid"
+                        borderColor="purple.100"
+                        verticalAlign={cell.settings?.verticalAlign || 'top'}
+                        colSpan={cell.colSpan || 1}
+                        rowSpan={cell.rowSpan || 1}
+                        backgroundColor={cell.settings?.backgroundColor && cell.settings?.backgroundColor !== 'transparent' ? cell.settings.backgroundColor : undefined}
+                      >
+                        <TableCellDropZone
+                          tableId={component.id}
+                          tableRowId={tableRow.id}
+                          cell={cell}
+                          parentId={parentId}
+                          rowId={rowId}
+                          columnId={columnId}
+                          onSelect={onSelect}
+                          selectedTarget={selectedTarget}
+                          cellStyle={{ width: '100%' }}
+                        />
+                      </Box>
+                    ))}
+                    {isSelected && (
+                      <Box as="td" width="1%" p={2} verticalAlign="top">
+                        <IconButton aria-label="Add table cell" size="xs" variant="ghost" colorScheme="purple" icon={<AddIcon />} onClick={(e) => { e.stopPropagation(); addTableCell(component.id, tableRow.id); }} />
+                      </Box>
+                    )}
+                  </Box>
+                ))}
+              </Box>
+            </Box>
           </Box>
         );
       case COMPONENT_TYPES.SPACE:
@@ -714,8 +830,22 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
     <Box
       mb={0}
       borderRadius="md"
+      position="relative"
       style={{ outline: isSelected ? '2px solid #3182ce' : 'none' }}
     >
+      {isSelected && (
+        <IconButton
+          aria-label="Remove component"
+          size="xs"
+          colorScheme="red"
+          icon={<DeleteIcon />}
+          position="absolute"
+          top="4px"
+          right="4px"
+          zIndex={10}
+          onClick={handleRemove}
+        />
+      )}
       {renderContent()}
     </Box>
   );

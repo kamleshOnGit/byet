@@ -230,12 +230,91 @@ const CreateTemplate = () => {
 
     const renderRichText = (text) => escapeHtml(text || '').replace(/\n/g, '<br />');
 
+    const isFlexColumn = (s) => s?.display === 'flex' && (s?.flexDirection === 'column' || s?.flexDirection === 'column-reverse');
+
+    const isFlexRow = (s) => s?.display === 'flex' && (!s?.flexDirection || s?.flexDirection === 'row' || s?.flexDirection === 'row-reverse');
+
+    const resolveHorizontalAlign = (s) => {
+      const horizontalSource = isFlexColumn(s) ? s?.alignItems : s?.justifyContent;
+      if (horizontalSource === 'flex-end') return 'right';
+      if (horizontalSource === 'center') return 'center';
+      if (horizontalSource === 'space-between' || horizontalSource === 'space-around' || horizontalSource === 'space-evenly') return 'center';
+      if (s?.textAlign === 'right') return 'right';
+      if (s?.textAlign === 'center') return 'center';
+      if (s?.alignItems === 'flex-end') return 'right';
+      if (s?.alignItems === 'center') return 'center';
+      return 'left';
+    };
+
+    const resolveVerticalAlign = (s) => {
+      const verticalSource = isFlexColumn(s) ? s?.justifyContent : s?.alignItems;
+      if (verticalSource === 'center') return 'middle';
+      if (verticalSource === 'flex-end') return 'bottom';
+      return 'top';
+    };
+
+    const makeFlexFallbackTableStyle = (s, blockStyle) => {
+      const align = resolveHorizontalAlign(s);
+      const parts = [blockStyle, 'border-collapse:collapse;', 'width:100%;'];
+      if (s?.display === 'flex') parts.push('display:table;');
+      if (align === 'center') parts.push('margin-left:auto;margin-right:auto;');
+      if (align === 'right') parts.push('margin-left:auto;');
+      return parts.join('');
+    };
+
+    const renderNavLikeLinks = (items, s, blockStyle, gapPx = 8) => {
+      const align = resolveHorizontalAlign(s);
+      const linkStyle = makeTextStyle({ ...s, textColor: s.textColor || '#333333', textDecoration: s.textDecoration || 'none' });
+      const distributionSource = isFlexColumn(s) ? s?.alignItems : s?.justifyContent;
+      const shouldDistribute = distributionSource === 'space-between' || distributionSource === 'space-around' || distributionSource === 'space-evenly';
+      if (shouldDistribute && items.length > 1) {
+        return `
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="${makeFlexFallbackTableStyle(s, blockStyle)}">
+            <tr>
+              ${items.map((item) => `<td align="center" style="padding:0 ${gapPx}px;"><a href="#" style="display:inline-block;${linkStyle}">${escapeHtml(item)}</a></td>`).join('')}
+            </tr>
+          </table>
+        `;
+      }
+      return `
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="${makeFlexFallbackTableStyle(s, blockStyle)}">
+          <tr>
+            <td align="${align}" style="text-align:${align};vertical-align:${resolveVerticalAlign(s)};">
+              ${items.map((item, index) => `<a href="#" style="display:inline-block;padding:0 ${gapPx}px;${index === 0 ? '' : 'margin-left:0;'}${linkStyle}">${escapeHtml(item)}</a>`).join('')}
+            </td>
+          </tr>
+        </table>
+      `;
+    };
+
+    const renderAlignedTextBlock = (content, s, blockStyle) => {
+      const align = resolveHorizontalAlign(s);
+      const verticalAlign = resolveVerticalAlign(s);
+      return `
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="${makeFlexFallbackTableStyle(s, blockStyle)}">
+          <tr>
+            <td align="${align}" style="text-align:${align};vertical-align:${verticalAlign};${makeTextStyle(s)}">
+              ${renderRichText(content)}
+            </td>
+          </tr>
+        </table>
+      `;
+    };
+
+    const renderBasicTextTag = (tagName, content, s, extraStyle = '') => {
+      if (s?.display === 'flex') {
+        return renderAlignedTextBlock(content, s, extraStyle);
+      }
+      return `<${tagName} style="margin:0;${makeTextStyle(s)}${extraStyle}">${renderRichText(content)}</${tagName}>`;
+    };
+
     const renderComponent = (component) => {
       const s = component?.settings || {};
       const wrapperStyle = [
-        makeBoxStyle(s, { includePadding: true, includeMargin: false, includeText: false, includeBackground: true, includeDimensions: true }),
+        makeBoxStyle(s, { includePadding: true, includeMargin: false, includeText: false, includeBackground: true, includeDimensions: true, includeDisplay: false, includeFloat: false, includeFlex: false }),
         'mso-line-height-rule:exactly;',
       ].join('');
+      const safeBlockStyle = makeBoxStyle(s, { includeBackground: true, includePadding: true, includeBorder: true, includeRadius: true, includeDisplay: false, includeFloat: false, includeFlex: false });
       const spacerAfter = Number.isFinite(s?.margin?.bottom) ? s.margin.bottom : 0;
 
       const wrap = (inner) => `
@@ -253,28 +332,28 @@ const CreateTemplate = () => {
 
       switch (component.type) {
         case COMPONENT_TYPES.TEXT:
-          return wrap(`<div style="margin:0;${makeTextStyle(s)}">${renderRichText(component.content)}</div>`);
+          return wrap(renderBasicTextTag('div', component.content, s));
         case COMPONENT_TYPES.HEADING:
         case COMPONENT_TYPES.HEADER_1:
-          return wrap(`<h1 style="margin:0;${makeTextStyle(s)}${s.fontWeight ? '' : 'font-weight:700;'}">${renderRichText(component.content)}</h1>`);
+          return wrap(renderBasicTextTag('h1', component.content, s, s.fontWeight ? '' : 'font-weight:700;'));
         case COMPONENT_TYPES.HEADER_2:
-          return wrap(`<h2 style="margin:0;${makeTextStyle(s)}${s.fontWeight ? '' : 'font-weight:700;'}">${renderRichText(component.content)}</h2>`);
+          return wrap(renderBasicTextTag('h2', component.content, s, s.fontWeight ? '' : 'font-weight:700;'));
         case COMPONENT_TYPES.HEADER_3:
-          return wrap(`<h3 style="margin:0;${makeTextStyle(s)}${s.fontWeight ? '' : 'font-weight:700;'}">${renderRichText(component.content)}</h3>`);
+          return wrap(renderBasicTextTag('h3', component.content, s, s.fontWeight ? '' : 'font-weight:700;'));
         case COMPONENT_TYPES.PARAGRAPH:
-          return wrap(`<p style="margin:0;${makeTextStyle(s)}">${renderRichText(component.content)}</p>`);
+          return wrap(renderBasicTextTag('p', component.content, s));
         case COMPONENT_TYPES.ORDERED_LIST:
           return wrap(`<ol style="margin:0;padding-left:20px;${makeTextStyle(s)}${s.listStyleType ? `list-style-type:${escapeHtml(s.listStyleType)};` : ''}${s.listStylePosition ? `list-style-position:${escapeHtml(s.listStylePosition)};` : ''}">${(component.content || '').split('\n').filter(Boolean).map((item) => `<li>${renderRichText(item)}</li>`).join('')}</ol>`);
         case COMPONENT_TYPES.UNORDERED_LIST:
           return wrap(`<ul style="margin:0;padding-left:20px;${makeTextStyle(s)}${s.listStyleType ? `list-style-type:${escapeHtml(s.listStyleType)};` : ''}${s.listStylePosition ? `list-style-position:${escapeHtml(s.listStylePosition)};` : ''}">${(component.content || '').split('\n').filter(Boolean).map((item) => `<li>${renderRichText(item)}</li>`).join('')}</ul>`);
         case COMPONENT_TYPES.IMAGE: {
-          const width = normalizeCssValue(s.width || component.imageWidth, '');
-          const height = normalizeCssValue(s.height || component.imageHeight, '');
+          const width = normalizeCssValue(s.width, '');
+          const height = normalizeCssValue(s.height, '');
           const maxWidth = normalizeCssValue(s.maxWidth, '');
           const minWidth = normalizeCssValue(s.minWidth, '');
           const minHeight = normalizeCssValue(s.minHeight, '');
           const maxHeight = normalizeCssValue(s.maxHeight, '');
-          const sizeStyle = `${width ? `width:${width};max-width:${width};` : `width:100%;max-width:${maxWidth || '100%'};`}${height ? `height:${height};` : 'height:auto;'}${minWidth ? `min-width:${minWidth};` : ''}${minHeight ? `min-height:${minHeight};` : ''}${maxHeight ? `max-height:${maxHeight};` : ''}${s.display ? `display:${s.display};` : 'display:block;'}${s.float ? `float:${s.float};` : ''}${makeBorderStyle(s)}${makeRadiusStyle(s)}${makeBackgroundStyle(s)}box-sizing:border-box;`;
+          const sizeStyle = `${width ? `width:${width};max-width:${width};` : `width:100%;max-width:${maxWidth || '100%'};`}${height ? `height:${height};` : 'height:auto;'}${minWidth ? `min-width:${minWidth};` : ''}${minHeight ? `min-height:${minHeight};` : ''}${maxHeight ? `max-height:${maxHeight};` : ''}display:block;${makeBorderStyle(s)}${makeRadiusStyle(s)}${makeBackgroundStyle(s)}box-sizing:border-box;`;
           return wrap(`<img src="${escapeHtml(component.imageUrl || DUMMY_IMAGE_URL)}" alt="${escapeHtml(component.content) || ''}" style="display:block;border:0;outline:none;text-decoration:none;${sizeStyle}" />`);
         }
         case COMPONENT_TYPES.LINK:
@@ -299,7 +378,32 @@ const CreateTemplate = () => {
         case COMPONENT_TYPES.SOCIAL_ICONS: {
           const urls = (component.socialUrls || '').split('\n').filter(Boolean);
           const icons = urls.map((url) => `<a href="${escapeHtml(url)}" target="_blank" style="display:inline-block;margin:0 4px;"><img src="https://dummyimage.com/32x32/cccccc/000000.png&text=S" alt="social" width="32" height="32" style="display:block;border:0;outline:none;" /></a>`).join('');
-          return wrap(`<div style="${s.textAlign ? `text-align:${s.textAlign};` : ''}${makeLayoutStyle(s)}">${icons || '<span>Social Icons</span>'}</div>`);
+          return wrap(`<div style="${s.textAlign ? `text-align:${s.textAlign};` : ''}${safeBlockStyle}">${icons || '<span>Social Icons</span>'}</div>`);
+        }
+        case COMPONENT_TYPES.TABLE: {
+          const tableRows = component.tableRows || [];
+          if (tableRows.length > 0) {
+            const tableSettings = component.settings || {};
+            return wrap(`
+              <table role="presentation" width="100%" cellspacing="${Number.parseInt(tableSettings.cellSpacing, 10) || 0}" cellpadding="${Number.parseInt(tableSettings.cellPadding, 10) || 0}" border="0" style="border-collapse:${escapeHtml(tableSettings.borderCollapse || 'collapse')};${safeBlockStyle}">
+                ${tableRows.map((tableRow) => `
+                  <tr style="${tableRow.settings?.height ? `height:${escapeHtml(tableRow.settings.height)};` : ''}${tableRow.settings?.backgroundColor && tableRow.settings.backgroundColor !== 'transparent' ? `background-color:${escapeHtml(tableRow.settings.backgroundColor)};` : ''}">
+                    ${(tableRow.cells || []).map((cell) => `
+                      <td colspan="${Math.max(1, Number.parseInt(cell.colSpan, 10) || 1)}" rowspan="${Math.max(1, Number.parseInt(cell.rowSpan, 10) || 1)}" style="width:${escapeHtml(cell.settings?.width || cell.width || `${Math.floor(100 / ((tableRow.cells || []).length || 1))}%`)};vertical-align:${escapeHtml(cell.settings?.verticalAlign || 'top')};padding:${Number.parseInt(tableSettings.cellPadding, 10) || 0}px;border:1px solid #e9d8fd;${cell.settings?.backgroundColor && cell.settings.backgroundColor !== 'transparent' ? `background-color:${escapeHtml(cell.settings.backgroundColor)};` : ''}${cell.settings?.height ? `height:${escapeHtml(cell.settings.height)};` : ''}">
+                        ${(cell.components || []).map((nestedComponent) => renderComponent(nestedComponent)).join('') || '&nbsp;'}
+                      </td>
+                    `).join('')}
+                  </tr>
+                `).join('')}
+              </table>
+            `);
+          }
+          const rows = (component.tableData || '').split('\n').filter(Boolean).map((line) => line.split(','));
+          return wrap(`
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;${safeBlockStyle}">
+              ${rows.map((cells) => `<tr>${cells.map((cell) => `<td style="padding:8px;border:1px solid #e2e8f0;">${escapeHtml(cell.trim())}</td>`).join('')}</tr>`).join('')}
+            </table>
+          `);
         }
         case COMPONENT_TYPES.HR:
           return wrap(`<div style="border-top:${Number.isFinite(s.borderWidth) && s.borderWidth > 0 ? s.borderWidth : 1}px ${s.border || 'solid'} ${s.borderColor || '#cccccc'};font-size:0;line-height:0;">&nbsp;</div>`);
@@ -308,30 +412,28 @@ const CreateTemplate = () => {
         case COMPONENT_TYPES.SPACE:
           return makeSpacerTable(component.height || 20);
         case COMPONENT_TYPES.ICON:
-          return wrap(`<div style="${makeTextStyle(s)}${s.textAlign ? `text-align:${s.textAlign};` : ''}${makeLayoutStyle(s)}font-size:${normalizeCssValue(s.fontSize, '24px')};">${escapeHtml(component.iconName) || '★'}</div>`);
+          return wrap(`<div style="${makeTextStyle(s)}${s.textAlign ? `text-align:${s.textAlign};` : ''}${safeBlockStyle}font-size:${normalizeCssValue(s.fontSize, '24px')};">${escapeHtml(component.iconName) || '★'}</div>`);
         case COMPONENT_TYPES.HTML:
           return wrap(component.htmlContent || '');
         case COMPONENT_TYPES.MENU: {
           const items = (component.menuItems || component.content || '').split('\n').filter(Boolean);
-          const links = items.map((item) => `<a href="#" style="display:inline-block;padding:0 8px;${makeTextStyle({ ...s, textColor: s.textColor || '#333333', textDecoration: s.textDecoration || 'none' })}">${escapeHtml(item)}</a>`).join('');
-          return wrap(`<div style="${s.textAlign ? `text-align:${s.textAlign};` : ''}${makeLayoutStyle(s)}">${links}</div>`);
+          return wrap(renderNavLikeLinks(items, s, safeBlockStyle, 8));
         }
         case COMPONENT_TYPES.DIV:
-          return wrap(`<div style="margin:0;${makeTextStyle(s)}${makeBoxStyle(s, { includeBackground: true, includePadding: true, includeBorder: true, includeRadius: true })}">${renderRichText(component.content)}</div>`);
+          return wrap(renderBasicTextTag('div', component.content, s, safeBlockStyle));
         case COMPONENT_TYPES.SPAN:
-          return wrap(`<span style="${makeTextStyle(s)}${makeBoxStyle(s, { includeBackground: true, includePadding: true, includeBorder: true, includeRadius: true })}">${renderRichText(component.content)}</span>`);
+          return wrap(renderBasicTextTag('span', component.content, s, safeBlockStyle));
         case COMPONENT_TYPES.NAV: {
           const items = (component.content || '').split('\n').filter(Boolean);
-          const links = items.map((item) => `<a href="#" style="display:inline-block;padding:0 10px;${makeTextStyle({ ...s, textDecoration: s.textDecoration || 'none' })}">${escapeHtml(item)}</a>`).join('');
-          return wrap(`<div style="${s.textAlign ? `text-align:${s.textAlign};` : ''}${makeBoxStyle(s, { includeBackground: true, includePadding: true, includeBorder: true, includeRadius: true })}">${links || '<span>Navigation</span>'}</div>`);
+          return wrap(items.length ? renderNavLikeLinks(items, s, safeBlockStyle, 10) : renderAlignedTextBlock('Navigation', s, safeBlockStyle));
         }
         case COMPONENT_TYPES.HEADER:
         case COMPONENT_TYPES.FOOTER:
         case COMPONENT_TYPES.SIDEBAR:
         case COMPONENT_TYPES.BANNER:
-          return wrap(`<div style="margin:0;${makeTextStyle(s)}${makeBoxStyle(s, { includeBackground: true, includePadding: true, includeBorder: true, includeRadius: true })}">${renderRichText(component.content)}</div>`);
+          return wrap(renderAlignedTextBlock(component.content, s, safeBlockStyle));
         default:
-          return wrap(`<div style="margin:0;${makeTextStyle(s)}">${renderRichText(component.content)}</div>`);
+          return wrap(renderBasicTextTag('div', component.content, s));
       }
     };
 

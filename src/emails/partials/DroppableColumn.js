@@ -12,7 +12,10 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, syncEditorToHtml, o
 
   const [, drop] = useDrop({
     accept: Object.values(COMPONENT_TYPES),
-    drop: (item) => {
+    drop: (item, monitor) => {
+      if (monitor.didDrop()) {
+        return undefined;
+      }
       const newComponent = createComponentInstance(item.type);
       addComponentToColumn(parentId, rowId, column.id, newComponent);
 

@@ -3,6 +3,17 @@ import { COMPONENT_TYPES } from './componentTypes';
 export const DUMMY_IMAGE_URL = 'https://dummyimage.com/600x400/cccccc/000000.png&text=Placeholder';
 export const DUMMY_LINK_URL = 'https://dummyimage.com';
 
+const createDefaultTableRows = () => ([
+  {
+    id: Date.now() + Math.floor(Math.random() * 100000),
+    settings: {},
+    cells: [
+      { id: Date.now() + Math.floor(Math.random() * 100000), width: '50%', colSpan: 1, rowSpan: 1, settings: {}, components: [] },
+      { id: Date.now() + Math.floor(Math.random() * 100000), width: '50%', colSpan: 1, rowSpan: 1, settings: {}, components: [] },
+    ],
+  },
+]);
+
 export const COMPONENT_LIBRARY = [
   {
     type: COMPONENT_TYPES.TEXT,
@@ -98,6 +109,7 @@ export const COMPONENT_LIBRARY = [
     title: 'Table',
     defaults: {
       tableData: 'Header 1,Header 2,Header 3\nRow 1 Col 1,Row 1 Col 2,Row 1 Col 3\nRow 2 Col 1,Row 2 Col 2,Row 2 Col 3',
+      tableRows: createDefaultTableRows(),
       content: '',
     },
   },
@@ -165,7 +177,7 @@ const defaultSettings = {
   fontWeight: 'normal',
   textAlign: 'left',
   textColor: '#000000',
-  backgroundColor: '#ffffff',
+  backgroundColor: 'transparent',
   backgroundImage: '',
   backgroundSize: 'cover',
   backgroundPosition: 'center',
@@ -194,6 +206,7 @@ export const createComponentInstance = (componentType) => {
     socialUrls: '',
     videoUrl: '',
     tableData: '',
+    tableRows: [],
     height: 0,
     iconName: '',
     htmlContent: '',

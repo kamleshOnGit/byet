@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, Text, Input, Select, Slider, SliderTrack, SliderFilledTrack, SliderThumb, Divider, Button, Accordion, AccordionItem, AccordionButton, AccordionPanel, AccordionIcon } from '@chakra-ui/react';
 
 const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTemplateSettingsChange }) => {
+  const [draftValues, setDraftValues] = useState({});
   const [settings, setSettings] = useState({
     // Padding and margin
     padding: { top: 0, right: 0, bottom: 0, left: 0 },
@@ -55,6 +56,12 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
     flexWrap: '',
     overflow: '',
     opacity: '',
+    colSpan: 1,
+    rowSpan: 1,
+    verticalAlign: '',
+    borderCollapse: 'collapse',
+    cellSpacing: 0,
+    cellPadding: 0,
 
     // Link specific
     linkColor: '',
@@ -73,18 +80,65 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
     return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(raw) ? raw : fallback;
   };
 
+  const clampAlpha = (value) => {
+    const parsed = Number.parseFloat(value);
+    if (!Number.isFinite(parsed)) return 1;
+    return Math.min(1, Math.max(0, parsed));
+  };
+
+  const parseColorParts = (value, fallback = '#000000') => {
+    const raw = `${value || ''}`.trim();
+    if (!raw || raw === 'transparent') {
+      return { hex: fallback, alpha: 0, preview: 'transparent' };
+    }
+    const hexMatch = raw.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (hexMatch) {
+      const hex = hexMatch[1].length === 3
+        ? `#${hexMatch[1].split('').map((ch) => `${ch}${ch}`).join('')}`
+        : raw;
+      return { hex, alpha: 1, preview: hex };
+    }
+    const rgbaMatch = raw.match(/^rgba?\(([^)]+)\)$/i);
+    if (rgbaMatch) {
+      const parts = rgbaMatch[1].split(',').map((part) => part.trim());
+      const r = Math.min(255, Math.max(0, Number.parseInt(parts[0], 10) || 0));
+      const g = Math.min(255, Math.max(0, Number.parseInt(parts[1], 10) || 0));
+      const b = Math.min(255, Math.max(0, Number.parseInt(parts[2], 10) || 0));
+      const a = parts.length > 3 ? clampAlpha(parts[3]) : 1;
+      const hex = `#${[r, g, b].map((num) => num.toString(16).padStart(2, '0')).join('')}`;
+      return { hex, alpha: a, preview: `rgba(${r}, ${g}, ${b}, ${a})` };
+    }
+    return { hex: fallback, alpha: 1, preview: raw };
+  };
+
+  const buildColorValue = (hex, alpha) => {
+    const safeHex = normalizeColorValue(hex, '#000000');
+    const safeAlpha = clampAlpha(alpha);
+    if (safeAlpha <= 0) return 'transparent';
+    if (safeAlpha >= 1) return safeHex;
+    const normalized = safeHex.replace('#', '');
+    const r = Number.parseInt(normalized.slice(0, 2), 16);
+    const g = Number.parseInt(normalized.slice(2, 4), 16);
+    const b = Number.parseInt(normalized.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${safeAlpha})`;
+  };
+
   const renderColorField = (label, key, placeholder, fallback = '#000000') => (
     <Box mb={3}>
       <Text fontSize="xs" mb={1}>{label}</Text>
       <Box display="flex" gap={2} alignItems="center">
+        {(() => {
+          const colorParts = parseColorParts(settings[key], fallback);
+          return (
+            <>
         <Input
           type="color"
-          value={normalizeColorValue(settings[key], fallback)}
-          onChange={(e) => handleSettingChange(key, e.target.value)}
+          value={colorParts.hex}
+          onChange={(e) => handleSettingChange(key, buildColorValue(e.target.value, colorParts.alpha))}
           size="sm"
           width="56px"
           p={1}
-          borderColor={settings[key] ? normalizeColorValue(settings[key], fallback) : 'gray.200'}
+          borderColor={settings[key] ? colorParts.hex : 'gray.200'}
           bg="white"
         />
         <Input
@@ -93,17 +147,31 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
           size="sm"
           placeholder={placeholder}
         />
+        <Input
+          type="number"
+          min={0}
+          max={100}
+          step={1}
+          value={Math.round(colorParts.alpha * 100)}
+          onChange={(e) => handleSettingChange(key, buildColorValue(colorParts.hex, (Number.parseFloat(e.target.value) || 0) / 100))}
+          size="sm"
+          width="72px"
+          placeholder="A%"
+        />
         <Box
           width="24px"
           height="24px"
           borderRadius="md"
           border="1px solid"
           borderColor="gray.200"
-          bg={settings[key] && settings[key] !== 'transparent' ? normalizeColorValue(settings[key], fallback) : 'transparent'}
+          bg={colorParts.preview === 'transparent' ? 'transparent' : colorParts.preview}
           backgroundImage={settings[key] === 'transparent' ? 'linear-gradient(45deg, #e2e8f0 25%, transparent 25%), linear-gradient(-45deg, #e2e8f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e2e8f0 75%), linear-gradient(-45deg, transparent 75%, #e2e8f0 75%)' : 'none'}
           backgroundSize="8px 8px"
           backgroundPosition="0 0, 0 4px, 4px -4px, -4px 0px"
         />
+            </>
+          );
+        })()}
       </Box>
     </Box>
   );
@@ -112,10 +180,14 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
     <Box mb={3}>
       <Text fontSize="xs" mb={1}>{label}</Text>
       <Box display="flex" gap={2} alignItems="center">
+        {(() => {
+          const colorParts = parseColorParts(templateSettings?.[key], fallback);
+          return (
+            <>
         <Input
           type="color"
-          value={normalizeColorValue(templateSettings?.[key], fallback)}
-          onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, [key]: e.target.value })}
+          value={colorParts.hex}
+          onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, [key]: buildColorValue(e.target.value, colorParts.alpha) })}
           size="sm"
           width="56px"
           p={1}
@@ -127,7 +199,21 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
           size="sm"
           placeholder={placeholder}
         />
-        <Box width="24px" height="24px" borderRadius="md" border="1px solid" borderColor="gray.200" bg={normalizeColorValue(templateSettings?.[key], fallback)} />
+        <Input
+          type="number"
+          min={0}
+          max={100}
+          step={1}
+          value={Math.round(colorParts.alpha * 100)}
+          onChange={(e) => onTemplateSettingsChange?.({ ...templateSettings, [key]: buildColorValue(colorParts.hex, (Number.parseFloat(e.target.value) || 0) / 100) })}
+          size="sm"
+          width="72px"
+          placeholder="A%"
+        />
+        <Box width="24px" height="24px" borderRadius="md" border="1px solid" borderColor="gray.200" bg={colorParts.preview === 'transparent' ? 'transparent' : colorParts.preview} backgroundImage={(templateSettings?.[key] || '') === 'transparent' ? 'linear-gradient(45deg, #e2e8f0 25%, transparent 25%), linear-gradient(-45deg, #e2e8f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e2e8f0 75%), linear-gradient(-45deg, transparent 75%, #e2e8f0 75%)' : 'none'} backgroundSize="8px 8px" backgroundPosition="0 0, 0 4px, 4px -4px, -4px 0px" />
+            </>
+          );
+        })()}
       </Box>
     </Box>
   );
@@ -135,6 +221,7 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
   // Update settings when selected component changes
   useEffect(() => {
     if (selectedTarget?.data?.settings) {
+      setDraftValues({});
       setSettings({
         // Start with default settings
         padding: { top: 0, right: 0, bottom: 0, left: 0 },
@@ -176,13 +263,25 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
         flexWrap: '',
         overflow: '',
         opacity: '',
+        colSpan: 1,
+        rowSpan: 1,
+        verticalAlign: '',
+        borderCollapse: 'collapse',
+        cellSpacing: 0,
+        cellPadding: 0,
         linkColor: '',
         buttonColor: '',
         buttonTextColor: '',
         listStyleType: 'disc',
         listStylePosition: '',
         // Then override with target settings
-        ...selectedTarget.data.settings
+        ...selectedTarget.data.settings,
+        ...(selectedTarget.kind === 'tableCell' ? {
+          width: selectedTarget.data.width ?? selectedTarget.data.settings?.width ?? '',
+          colSpan: selectedTarget.data.colSpan ?? selectedTarget.data.settings?.colSpan ?? 1,
+          rowSpan: selectedTarget.data.rowSpan ?? selectedTarget.data.settings?.rowSpan ?? 1,
+          verticalAlign: selectedTarget.data.settings?.verticalAlign || '',
+        } : {}),
       });
     }
   }, [selectedTarget]);
@@ -208,6 +307,38 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
   const handleMarginChange = (side, value) => {
     const newMargin = { ...settings.margin, [side]: value };
     handleSettingChange('margin', newMargin);
+  };
+
+  const getDraftKey = (group, side) => `${group}.${side}`;
+
+  const handleBoxNumberDraftChange = (group, side, value) => {
+    setDraftValues((prev) => ({ ...prev, [getDraftKey(group, side)]: value }));
+  };
+
+  const commitBoxNumberDraft = (group, side, fallback = 0) => {
+    const draftKey = getDraftKey(group, side);
+    const rawValue = draftValues[draftKey];
+    if (rawValue === undefined) return;
+    const trimmed = `${rawValue}`.trim();
+    const nextValue = trimmed === '' ? fallback : (Number.parseInt(trimmed, 10) || fallback);
+    if (group === 'padding') {
+      handlePaddingChange(side, nextValue);
+    } else {
+      handleMarginChange(side, nextValue);
+    }
+    setDraftValues((prev) => {
+      const next = { ...prev };
+      delete next[draftKey];
+      return next;
+    });
+  };
+
+  const getBoxNumberValue = (group, side) => {
+    const draftKey = getDraftKey(group, side);
+    if (Object.prototype.hasOwnProperty.call(draftValues, draftKey)) {
+      return draftValues[draftKey];
+    }
+    return settings[group]?.[side] ?? 0;
   };
 
   const toTitleCase = (value) => {
@@ -272,11 +403,14 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
   const showMargin = isRowOrColumn || (!isComponent ? true : componentTypesWithBoxStyles.includes(componentType));
   const showText = isRowOrColumn || (!isComponent ? true : componentTypesWithTextStyles.includes(componentType));
   const showBackground = isRowOrColumn || (!isComponent ? true : componentTypesWithBoxStyles.includes(componentType));
-  const showDimensions = isRowOrColumn || (!isComponent ? true : componentType === 'Img');
+  const showDimensions = Boolean(selectedTarget);
   const showBorder = isRowOrColumn || (!isComponent ? true : componentTypesWithBoxStyles.includes(componentType));
   const showTypographyAdvanced = isRowOrColumn || (!isComponent ? true : componentTypesWithTextStyles.includes(componentType));
   const showLayout = isRowOrColumn || (!isComponent ? true : componentTypesWithBoxStyles.includes(componentType));
   const showListStyle = isComponent && (componentType === 'OrderedList' || componentType === 'UnorderedList');
+  const isTableComponent = isComponent && componentType === 'Table';
+  const isTableRowTarget = selectedTarget?.kind === 'tableRow';
+  const isTableCellTarget = selectedTarget?.kind === 'tableCell';
 
   return (
     <Box w="100%" h="100%" p={4} overflowY="auto">
@@ -448,6 +582,67 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                   <>
                     <Text fontSize="md" fontWeight="semibold" mb={2}>Link Settings</Text>
                     {renderColorField('Link Color', 'linkColor', '#0066cc / inherit', '#0066cc')}
+                    <Divider my={4} />
+                  </>
+                )}
+
+                {isTableComponent && (
+                  <>
+                    <Text fontSize="md" fontWeight="semibold" mb={2}>Table Settings</Text>
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Border Collapse</Text>
+                      <Select value={settings.borderCollapse} onChange={(e) => handleSettingChange('borderCollapse', e.target.value)} size="sm">
+                        <option value="collapse">Collapse</option>
+                        <option value="separate">Separate</option>
+                      </Select>
+                    </Box>
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Cell Spacing</Text>
+                      <Input type="number" value={settings.cellSpacing} onChange={(e) => handleSettingChange('cellSpacing', Number.parseInt(e.target.value, 10) || 0)} size="sm" />
+                    </Box>
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Cell Padding</Text>
+                      <Input type="number" value={settings.cellPadding} onChange={(e) => handleSettingChange('cellPadding', Number.parseInt(e.target.value, 10) || 0)} size="sm" />
+                    </Box>
+                    <Divider my={4} />
+                  </>
+                )}
+
+                {isTableRowTarget && (
+                  <>
+                    <Text fontSize="md" fontWeight="semibold" mb={2}>Table Row Settings</Text>
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Row Height</Text>
+                      <Input value={settings.height} onChange={(e) => handleSettingChange('height', e.target.value)} size="sm" placeholder="auto / 60px" />
+                    </Box>
+                    <Divider my={4} />
+                  </>
+                )}
+
+                {isTableCellTarget && (
+                  <>
+                    <Text fontSize="md" fontWeight="semibold" mb={2}>Table Cell Settings</Text>
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Cell Width</Text>
+                      <Input value={settings.width} onChange={(e) => handleSettingChange('width', e.target.value)} size="sm" placeholder="50% / 200px" />
+                    </Box>
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Col Span</Text>
+                      <Input type="number" min={1} value={settings.colSpan} onChange={(e) => handleSettingChange('colSpan', Math.max(1, Number.parseInt(e.target.value, 10) || 1))} size="sm" />
+                    </Box>
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Row Span</Text>
+                      <Input type="number" min={1} value={settings.rowSpan} onChange={(e) => handleSettingChange('rowSpan', Math.max(1, Number.parseInt(e.target.value, 10) || 1))} size="sm" />
+                    </Box>
+                    <Box mb={3}>
+                      <Text fontSize="xs" mb={1}>Vertical Align</Text>
+                      <Select value={settings.verticalAlign} onChange={(e) => handleSettingChange('verticalAlign', e.target.value)} size="sm">
+                        <option value="">Default</option>
+                        <option value="top">Top</option>
+                        <option value="middle">Middle</option>
+                        <option value="bottom">Bottom</option>
+                      </Select>
+                    </Box>
                     <Divider my={4} />
                   </>
                 )}
@@ -679,8 +874,9 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                         <Text fontSize="xs" mb={1}>Top</Text>
                         <Input
                           type="number"
-                          value={settings.padding.top}
-                          onChange={(e) => handlePaddingChange('top', parseInt(e.target.value) || 0)}
+                          value={getBoxNumberValue('padding', 'top')}
+                          onChange={(e) => handleBoxNumberDraftChange('padding', 'top', e.target.value)}
+                          onBlur={() => commitBoxNumberDraft('padding', 'top', 0)}
                           size="sm"
                           width="70px"
                         />
@@ -689,8 +885,9 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                         <Text fontSize="xs" mb={1}>Right</Text>
                         <Input
                           type="number"
-                          value={settings.padding.right}
-                          onChange={(e) => handlePaddingChange('right', parseInt(e.target.value) || 0)}
+                          value={getBoxNumberValue('padding', 'right')}
+                          onChange={(e) => handleBoxNumberDraftChange('padding', 'right', e.target.value)}
+                          onBlur={() => commitBoxNumberDraft('padding', 'right', 0)}
                           size="sm"
                           width="70px"
                         />
@@ -699,8 +896,9 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                         <Text fontSize="xs" mb={1}>Bottom</Text>
                         <Input
                           type="number"
-                          value={settings.padding.bottom}
-                          onChange={(e) => handlePaddingChange('bottom', parseInt(e.target.value) || 0)}
+                          value={getBoxNumberValue('padding', 'bottom')}
+                          onChange={(e) => handleBoxNumberDraftChange('padding', 'bottom', e.target.value)}
+                          onBlur={() => commitBoxNumberDraft('padding', 'bottom', 0)}
                           size="sm"
                           width="70px"
                         />
@@ -709,8 +907,9 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                         <Text fontSize="xs" mb={1}>Left</Text>
                         <Input
                           type="number"
-                          value={settings.padding.left}
-                          onChange={(e) => handlePaddingChange('left', parseInt(e.target.value) || 0)}
+                          value={getBoxNumberValue('padding', 'left')}
+                          onChange={(e) => handleBoxNumberDraftChange('padding', 'left', e.target.value)}
+                          onBlur={() => commitBoxNumberDraft('padding', 'left', 0)}
                           size="sm"
                           width="70px"
                         />
@@ -730,8 +929,9 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                         <Text fontSize="xs" mb={1}>Top</Text>
                         <Input
                           type="number"
-                          value={settings.margin.top}
-                          onChange={(e) => handleMarginChange('top', parseInt(e.target.value) || 0)}
+                          value={getBoxNumberValue('margin', 'top')}
+                          onChange={(e) => handleBoxNumberDraftChange('margin', 'top', e.target.value)}
+                          onBlur={() => commitBoxNumberDraft('margin', 'top', 0)}
                           size="sm"
                           width="70px"
                         />
@@ -740,8 +940,9 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                         <Text fontSize="xs" mb={1}>Right</Text>
                         <Input
                           type="number"
-                          value={settings.margin.right}
-                          onChange={(e) => handleMarginChange('right', parseInt(e.target.value) || 0)}
+                          value={getBoxNumberValue('margin', 'right')}
+                          onChange={(e) => handleBoxNumberDraftChange('margin', 'right', e.target.value)}
+                          onBlur={() => commitBoxNumberDraft('margin', 'right', 0)}
                           size="sm"
                           width="70px"
                         />
@@ -750,8 +951,9 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                         <Text fontSize="xs" mb={1}>Bottom</Text>
                         <Input
                           type="number"
-                          value={settings.margin.bottom}
-                          onChange={(e) => handleMarginChange('bottom', parseInt(e.target.value) || 0)}
+                          value={getBoxNumberValue('margin', 'bottom')}
+                          onChange={(e) => handleBoxNumberDraftChange('margin', 'bottom', e.target.value)}
+                          onBlur={() => commitBoxNumberDraft('margin', 'bottom', 0)}
                           size="sm"
                           width="70px"
                         />
@@ -760,8 +962,9 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                         <Text fontSize="xs" mb={1}>Left</Text>
                         <Input
                           type="number"
-                          value={settings.margin.left}
-                          onChange={(e) => handleMarginChange('left', parseInt(e.target.value) || 0)}
+                          value={getBoxNumberValue('margin', 'left')}
+                          onChange={(e) => handleBoxNumberDraftChange('margin', 'left', e.target.value)}
+                          onBlur={() => commitBoxNumberDraft('margin', 'left', 0)}
                           size="sm"
                           width="70px"
                         />
@@ -1120,6 +1323,12 @@ const SettingsPanel = ({ selectedTarget, onUpdateTarget, templateSettings, onTem
                       flexWrap: '',
                       overflow: '',
                       opacity: '',
+                      colSpan: 1,
+                      rowSpan: 1,
+                      verticalAlign: '',
+                      borderCollapse: 'collapse',
+                      cellSpacing: 0,
+                      cellPadding: 0,
                       linkColor: '',
                       buttonColor: '',
                       buttonTextColor: '',

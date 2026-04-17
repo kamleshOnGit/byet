@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Text, Image, Heading, Divider } from '@chakra-ui/react';
+import { Button, Text, Image, Heading, Divider, VStack } from '@chakra-ui/react';
 import { AddIcon, AttachmentIcon, ChevronDownIcon, DragHandleIcon, ExternalLinkIcon, HamburgerIcon, InfoIcon, MinusIcon, RepeatIcon, SearchIcon, StarIcon } from '@chakra-ui/icons';
 import { useDrag } from 'react-dnd';
 import { COMPONENT_TYPES } from './componentTypes';
@@ -160,7 +160,7 @@ const DraggableComponent = ({ definition }) => {
       _hover={{ boxShadow: "md", transform: "translateY(-2px)" }}
       title={title || getTitle()} // Added title for hover text
       w="100%" // Responsive width
-      h="60px" // Set fixed height
+      h="76px"
       display="flex"
       justifyContent="center"
       alignItems="center"
@@ -168,7 +168,12 @@ const DraggableComponent = ({ definition }) => {
       border="1px solid"
       borderColor="gray.200"
     >
-      {icon}
+      <VStack spacing={1}>
+        {icon}
+        <Text fontSize="10px" lineHeight="1.1" color="gray.700" whiteSpace="normal" textAlign="center">
+          {title || getTitle()}
+        </Text>
+      </VStack>
     </Button>
   );
 };
