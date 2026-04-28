@@ -124,11 +124,35 @@ const parseInlineSettings = (el, assetBaseUrl) => {
   const fw = styleValue(style, 'font-weight');
   if (fw) out.fontWeight = fw;
 
+  const fst = styleValue(style, 'font-style');
+  if (fst) out.fontStyle = fst;
+
   const ff = styleValue(style, 'font-family');
   if (ff) out.fontFamily = ff;
 
   const ta = styleValue(style, 'text-align');
   if (ta) out.textAlign = ta;
+
+  const td = styleValue(style, 'text-decoration');
+  if (td) out.textDecoration = td;
+
+  const tt = styleValue(style, 'text-transform');
+  if (tt) out.textTransform = tt;
+
+  const lh = styleValue(style, 'line-height');
+  if (lh) out.lineHeight = lh;
+
+  const ls = styleValue(style, 'letter-spacing');
+  if (ls) out.letterSpacing = ls;
+
+  const ws = styleValue(style, 'white-space');
+  if (ws) out.whiteSpace = ws;
+
+  const wb = styleValue(style, 'word-break');
+  if (wb) out.wordBreak = wb;
+
+  const va = styleValue(style, 'vertical-align');
+  if (va) out.verticalAlign = va;
 
   const bgImg = styleValue(style, 'background-image');
   if (bgImg) {
@@ -167,6 +191,37 @@ const parseInlineSettings = (el, assetBaseUrl) => {
   if (w) out.width = w;
   const h = styleValue(style, 'height');
   if (h) out.height = h;
+
+  const minW = styleValue(style, 'min-width');
+  if (minW) out.minWidth = minW;
+  const maxW = styleValue(style, 'max-width');
+  if (maxW) out.maxWidth = maxW;
+  const minH = styleValue(style, 'min-height');
+  if (minH) out.minHeight = minH;
+  const maxH = styleValue(style, 'max-height');
+  if (maxH) out.maxHeight = maxH;
+
+  const display = styleValue(style, 'display');
+  if (display) out.display = display;
+  const float = styleValue(style, 'float');
+  if (float) out.float = float;
+  const alignSelf = styleValue(style, 'align-self');
+  if (alignSelf) out.alignSelf = alignSelf;
+  const justifyContent = styleValue(style, 'justify-content');
+  if (justifyContent) out.justifyContent = justifyContent;
+  const alignItems = styleValue(style, 'align-items');
+  if (alignItems) out.alignItems = alignItems;
+  const flexDirection = styleValue(style, 'flex-direction');
+  if (flexDirection) out.flexDirection = flexDirection;
+  const flexWrap = styleValue(style, 'flex-wrap');
+  if (flexWrap) out.flexWrap = flexWrap;
+  const overflow = styleValue(style, 'overflow');
+  if (overflow) out.overflow = overflow;
+  const opacity = styleValue(style, 'opacity');
+  if (opacity) out.opacity = opacity;
+
+  const boxSizing = styleValue(style, 'box-sizing');
+  if (boxSizing) out.boxSizing = boxSizing;
 
   return out;
 };

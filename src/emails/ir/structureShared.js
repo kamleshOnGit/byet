@@ -9,11 +9,16 @@ export const mergeBox = (base = {}, extra = {}) => ({ ...(base || {}), ...(extra
 const TEXT_STYLE_KEYS = [
   'fontSize',
   'fontWeight',
+  'fontStyle',
   'fontFamily',
   'textAlign',
   'textColor',
+  'textDecoration',
+  'textTransform',
   'lineHeight',
   'letterSpacing',
+  'whiteSpace',
+  'wordBreak',
   'backgroundColor',
   'padding',
   'margin',
@@ -21,12 +26,26 @@ const TEXT_STYLE_KEYS = [
   'borderColor',
   'borderWidth',
   'borderRadius',
+  'display',
+  'float',
+  'alignSelf',
+  'justifyContent',
+  'alignItems',
+  'flexDirection',
+  'flexWrap',
+  'overflow',
+  'opacity',
+  'boxSizing',
+  'verticalAlign',
 ];
 
 const MEDIA_STYLE_KEYS = [
   'width',
   'height',
+  'minWidth',
   'maxWidth',
+  'minHeight',
+  'maxHeight',
   'textAlign',
   'backgroundColor',
   'padding',
@@ -35,6 +54,13 @@ const MEDIA_STYLE_KEYS = [
   'borderColor',
   'borderWidth',
   'borderRadius',
+  'display',
+  'float',
+  'alignSelf',
+  'overflow',
+  'opacity',
+  'boxSizing',
+  'verticalAlign',
 ];
 
 const pickSettings = (settings = {}, keys = []) => {
@@ -42,7 +68,7 @@ const pickSettings = (settings = {}, keys = []) => {
   keys.forEach((key) => {
     if (settings[key] !== undefined) out[key] = settings[key];
   });
-  return out;
+  return out; 
 };
 
 export const getEffectiveSettings = (node) => ({
@@ -137,6 +163,7 @@ export const createTextComponent = (node) => {
   comp.type = COMPONENT_TYPES.SPAN;
   comp.content = node.text || '';
   applyComponentSettings(comp, node, 'text');
+  delete comp.settings.color;
   return comp;
 };
 
@@ -164,6 +191,17 @@ export const createComponentFromIr = (node) => {
   comp.type = componentType;
   applyComponentSettings(comp, node, componentType === COMPONENT_TYPES.IMAGE ? 'media' : 'text');
 
+  const ownSettings = node?.styleMap?.own || node?.ownSettings || {};
+  const effectiveSettings = node?.styleMap?.effective || node?.settings || {};
+
+  if (componentType !== COMPONENT_TYPES.BUTTON && componentType !== COMPONENT_TYPES.LINK) {
+    if (ownSettings.textAlign) {
+      comp.settings.textAlign = ownSettings.textAlign;
+    } else {
+      delete comp.settings.textAlign;
+    }
+  }
+
   if (componentType === COMPONENT_TYPES.IMAGE) {
     comp.imageUrl = node.props?.imageUrl || '';
     comp.content = node.props?.alt || comp.content || '';
@@ -175,11 +213,11 @@ export const createComponentFromIr = (node) => {
   if (componentType === COMPONENT_TYPES.BUTTON) {
     comp.linkUrl = node.props?.linkUrl || '';
     comp.content = node.props?.text || '';
-    if (node?.styleMap?.effective?.backgroundColor) {
-      comp.settings.buttonColor = node.styleMap.effective.backgroundColor;
+    if (ownSettings.backgroundColor || effectiveSettings.backgroundColor) {
+      comp.settings.buttonColor = ownSettings.backgroundColor || effectiveSettings.backgroundColor;
     }
-    if (node?.styleMap?.effective?.textColor) {
-      comp.settings.buttonTextColor = node.styleMap.effective.textColor;
+    if (ownSettings.textColor || effectiveSettings.textColor) {
+      comp.settings.buttonTextColor = ownSettings.textColor || effectiveSettings.textColor;
     }
     return comp;
   }
@@ -187,14 +225,19 @@ export const createComponentFromIr = (node) => {
   if (componentType === COMPONENT_TYPES.LINK) {
     comp.linkUrl = node.props?.linkUrl || '';
     comp.content = node.props?.text || '';
-    if (node?.styleMap?.effective?.textColor) {
-      comp.settings.linkColor = node.styleMap.effective.textColor;
+    if (ownSettings.textColor || effectiveSettings.textColor) {
+      comp.settings.linkColor = ownSettings.textColor || effectiveSettings.textColor;
     }
     return comp;
   }
 
   if (componentType === COMPONENT_TYPES.PARAGRAPH || componentType === COMPONENT_TYPES.SPAN || componentType === COMPONENT_TYPES.HEADER_1 || componentType === COMPONENT_TYPES.HEADER_2 || componentType === COMPONENT_TYPES.HEADER_3 || componentType === COMPONENT_TYPES.HEADER) {
     comp.content = node.props?.text || node.children?.map((child) => child.text || child.props?.text || '').join(' ') || '';
+    if (ownSettings.color) {
+      comp.settings.color = ownSettings.color;
+    } else {
+      delete comp.settings.color;
+    }
     return comp;
   }
 
@@ -204,8 +247,5 @@ export const createComponentFromIr = (node) => {
 
 export const isColumnMeaningful = (column) => {
   if (!column) return false;
-  if ((column.components || []).length > 0) return true;
-  if ((column.nestedRows || []).length > 0) return true;
-  const bg = column.settings?.backgroundColor;
-  return !!(bg && bg !== 'transparent');
+  return (column.components || []).length > 0 || (column.nestedRows || []).length > 0;
 };

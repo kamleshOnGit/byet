@@ -32,6 +32,7 @@ const createStructureRow = (sourceNode = null) => {
 const createStructureColumn = (sourceNode = null, size = 12) => {
   const column = { id: createId(), size, components: [], settings: {}, nestedRows: [] };
   if (sourceNode) applyEffectiveSettings(column, sourceNode);
+  column._ownSettings = sourceNode?.ownSettings || sourceNode?.styleMap?.own || {};
   column._scan = createScanMeta(sourceNode, 'column', 0.8, [`column_from_${`${sourceNode?.tag || 'node'}`.toLowerCase()}`]);
   return column;
 };
@@ -94,6 +95,12 @@ const isComplexNestedLayout = (rows = []) => {
   return rows.some((row) => (row?.columns || []).length > 1);
 };
 
+const hasRenderableComponentsInRows = (rows = []) => rows.some((row) =>
+  (row?.columns || []).some((column) =>
+    ((column?.components || []).length > 0) || ((column?.nestedRows || []).length > 0)
+  )
+);
+
 const shouldConvertNodeToRawHtml = (node) => {
   if (!node || node.kind !== IR_NODE_KIND.ELEMENT || !node.outerHTML) return false;
   const tag = `${node.tag || ''}`.toLowerCase();
@@ -122,7 +129,17 @@ const appendNodeContentToColumn = (node, column) => {
     return;
   }
   const tag = `${node.tag || ''}`.toLowerCase();
-  if (shouldFlattenWrapper(node) || !['table', 'tr', 'td'].includes(tag)) {
+  if (tag === 'table') {
+    const nestedRows = buildRowsFromTableNode(node);
+    if (nestedRows.length === 1 && (nestedRows[0].columns || []).length > 1 && column.components.length === 0) {
+      column.nestedRows.push(...nestedRows);
+      addScanReasons(column, ['promoted_nested_multicolumn_via_wrapper'], 0.75);
+    } else if (nestedRows.length > 0) {
+      mergeNestedRowsIntoColumn(column, nestedRows, 'merged_wrapped_table');
+    }
+    return;
+  }
+  if (shouldFlattenWrapper(node) || !['tr', 'td'].includes(tag)) {
     (node.children || []).forEach((child) => appendNodeContentToColumn(child, column));
   }
 };
@@ -157,6 +174,7 @@ const buildColumnsFromRowNode = (rowNode) => {
       const tag = `${child.tag || ''}`.toLowerCase();
       if (tag === 'table') {
         const nestedRows = buildRowsFromTableNode(child);
+
         if (
           nestedRows.length === 1
           && (nestedRows[0].columns || []).length === 1
@@ -172,7 +190,13 @@ const buildColumnsFromRowNode = (rowNode) => {
           appendComponentToColumn(column, createRawHtmlComponent(child));
           addScanReasons(column, ['complex_nested_table_raw_fallback'], 0.4);
         } else if (nestedRows.length > 0) {
-          mergeNestedRowsIntoColumn(column, nestedRows);
+          if (siblingCount === 1) {
+            column.nestedRows.push(...nestedRows);
+            addScanReasons(column, ['nested_multi_row_expansion'], 0.72);
+          } else {
+            mergeNestedRowsIntoColumn(column, nestedRows, 'merged_sibling_multi_row');
+            addScanReasons(column, ['merged_sibling_multi_row'], 0.72);
+          }
         } else {
           appendNodeContentToColumn(child, column);
         }
@@ -201,7 +225,8 @@ export const scanIrToStructureMap = (irDoc) => {
   if (dominantTable) {
     const section = createStructureSection(dominantTable);
     addScanReasons(section, ['dominant_table_root'], 0.95);
-    section.rows = normalizeScannedRows(buildRowsFromTableNode(dominantTable), section);
+    const rawRows = buildRowsFromTableNode(dominantTable);
+    section.rows = normalizeScannedRows(rawRows, section);
     if (section.rows.length > 0) {
       return {
         sections: [section],

@@ -173,15 +173,28 @@ const EmailList = () => {
 
   const getImportedFileBaseUrl = (file) => {
     const filePath = file?.path || '';
-    if (!filePath) return '';
-    try {
-      const normalizedPath = `${filePath}`.replace(/\\/g, '/');
-      const slashIndex = normalizedPath.lastIndexOf('/');
-      const dirPath = slashIndex >= 0 ? normalizedPath.slice(0, slashIndex + 1) : normalizedPath;
-      return new URL(`file:///${dirPath.replace(/^\/+/, '')}`).toString();
-    } catch (err) {
-      return '';
+    if (filePath) {
+      try {
+        const normalizedPath = `${filePath}`.replace(/\\/g, '/');
+        const slashIndex = normalizedPath.lastIndexOf('/');
+        const dirPath = slashIndex >= 0 ? normalizedPath.slice(0, slashIndex + 1) : normalizedPath;
+        return new URL(`file:///${dirPath.replace(/^\/+/, '')}`).toString();
+      } catch (err) {
+        return '';
+      }
     }
+    const relPath = file?.webkitRelativePath || '';
+    if (relPath) {
+      try {
+        const normalized = `${relPath}`.replace(/\\/g, '/');
+        const slashIndex = normalized.lastIndexOf('/');
+        const dirPath = slashIndex >= 0 ? normalized.slice(0, slashIndex + 1) : '';
+        if (dirPath) return new URL(dirPath, window.location.href).toString();
+      } catch (err) {
+        return '';
+      }
+    }
+    return '';
   };
 
   const handleCreate = () => {
