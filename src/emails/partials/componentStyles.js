@@ -2,7 +2,7 @@
 export const sectionStyle = {
   border: '2px dashed #e2e8f0',
   borderRadius: '8px',
-  padding: '16px',
+  padding: '8px',
   marginBottom: '16px',
   backgroundColor: 'transparent', // Let template backgrounds show through
   minHeight: '60px',
@@ -11,8 +11,8 @@ export const sectionStyle = {
 export const rowStyle = {
   border: '1px solid #e2e8f0',
   borderRadius: '4px',
-  padding: '12px',
-  marginBottom: '12px',
+  padding: '6px',
+  marginBottom: '8px',
   backgroundColor: 'transparent', // Let template backgrounds show through
   display: 'flex',
   flexWrap: 'nowrap',
@@ -28,8 +28,8 @@ export const columnParentStyle = (colSpan) => ({
   maxWidth: `${(colSpan / 12) * 100}%`,
   position: 'relative',
   border: '1px dashed #e2e8f0',
-  margin: '4px',
-  padding: '8px',
+  margin: '2px',
+  padding: '4px',
   minHeight: '40px',
   backgroundColor: 'transparent', // Let template backgrounds show through
   boxSizing: 'border-box',

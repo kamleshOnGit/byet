@@ -8,6 +8,28 @@ import { moveRow } from './DroppableRow';
 import { COMPONENT_TYPES } from './componentTypes';
 import { useEditorStore } from '../editorStore';
 
+const isRenderableRow = (row) => {
+  if (!row) return false;
+  const columns = row.columns || [];
+  const hasComponents = columns.some((column) => (column.components || []).length > 0);
+  if (hasComponents) return true;
+  const hasStyledColumn = columns.some((column) => {
+    const settings = column?.settings || {};
+    return !!(
+      (settings.backgroundColor && settings.backgroundColor !== 'transparent')
+      || settings.backgroundImage
+      || (settings.border && settings.border !== 'none' && settings.borderWidth)
+    );
+  });
+  if (hasStyledColumn) return true;
+  const rowSettings = row.settings || {};
+  return !!(
+    (rowSettings.backgroundColor && rowSettings.backgroundColor !== 'transparent')
+    || rowSettings.backgroundImage
+    || (rowSettings.border && rowSettings.border !== 'none' && rowSettings.borderWidth)
+  );
+};
+
 // Droppable Section Component
 const DroppableSection = ({ section, syncEditorToHtml, onSelect, selectedTarget }) => {
   const addRowToSection = useEditorStore((state) => state.addRowToSection);
@@ -154,7 +176,7 @@ const DroppableSection = ({ section, syncEditorToHtml, onSelect, selectedTarget 
   
   return (
     <Box ref={drop} style={updatedSectionStyle} position="relative">
-      {section.rows.map((row, index) => (
+      {(section.rows || []).filter(isRenderableRow).map((row, index) => (
         <DroppableRow
           key={row.id}
           row={row}

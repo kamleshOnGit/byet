@@ -159,7 +159,6 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, syncEditorToHtml, o
         outline: isSelected ? '2px solid #3182ce' : 'none',
         display: column?.settings?.display || 'flex',
         flexDirection: column?.settings?.flexDirection || 'column',
-        flex: '1 0 auto',
         justifyContent: column?.settings?.justifyContent || 'flex-start',
         alignItems: column?.settings?.alignItems || (column?.settings?.textAlign === 'center' ? 'center' : (column?.settings?.textAlign === 'right' ? 'flex-end' : 'stretch')),
         overflow: column?.settings?.overflow || 'visible',

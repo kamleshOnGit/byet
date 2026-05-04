@@ -241,16 +241,21 @@ const EmailList = () => {
       }
 
       const irLooksUsable = hasRenderableImportedContent(mappedIrSections);
+      const irStructurallyClose = shouldUseIrSections(structureComparison, mappedIrSections);
       const useIrSections = irLooksUsable;
       if (useIrSections) {
         importedSections = normalizeImportedSectionsUrls(mappedIrSections, assetBaseUrl);
         console.log('Using IR-mapped import structure as active path', {
-          closeToLegacy: shouldUseIrSections(structureComparison, mappedIrSections),
+          closeToLegacy: irStructurallyClose,
           comparison: structureComparison,
         });
       } else {
         importedSections = normalizeImportedSectionsUrls(legacySections, assetBaseUrl);
-        console.log('Falling back to legacy import structure because IR output is unusable', structureComparison);
+        console.log('Falling back to legacy import structure because IR output is unusable or structurally worse', {
+          irLooksUsable,
+          irStructurallyClose,
+          comparison: structureComparison,
+        });
       }
 
       if (!importedSections) return;
