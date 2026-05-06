@@ -95,16 +95,20 @@ const isComplexNestedLayout = (rows = []) => {
   return rows.some((row) => (row?.columns || []).length > 1);
 };
 
-const hasRenderableComponentsInRows = (rows = []) => rows.some((row) =>
-  (row?.columns || []).some((column) =>
-    ((column?.components || []).length > 0) || ((column?.nestedRows || []).length > 0)
-  )
-);
+const isStructurallyMeaningfulRow = (row) => {
+  if (!row) return false;
+  const columns = row.columns || [];
+  if (columns.some((col) => (col.components || []).length > 0)) return true;
+  if (columns.some((col) => (col.nestedRows || []).length > 0)) return true;
+  return false;
+};
 
 const shouldConvertNodeToRawHtml = (node) => {
   if (!node || node.kind !== IR_NODE_KIND.ELEMENT || !node.outerHTML) return false;
   const tag = `${node.tag || ''}`.toLowerCase();
   if (['table', 'tr', 'td', 'tbody', 'thead', 'tfoot', 'body', 'html'].includes(tag)) return false;
+  if (node?.layoutHints?.keepRowsGrouped || node?.layoutHints?.preferSingleBlock) return false;
+  if (['nav', 'social', 'hero', 'product', 'legal', 'logo', 'content_group', 'header'].includes(`${node?.semanticRole || ''}`.toLowerCase())) return false;
   if (shouldFlattenWrapper(node)) return false;
   const sig = node.contentSignature || {};
   const hasComplexContent = sig.hasNestedTable || (sig.hasStyledNode && (sig.hasBlockWrapper || sig.hasInlineWrapper));
@@ -129,14 +133,28 @@ const appendNodeContentToColumn = (node, column) => {
     return;
   }
   const tag = `${node.tag || ''}`.toLowerCase();
+  const semanticRole = `${node?.semanticRole || ''}`.toLowerCase();
+  const shouldPreferStructuredChildren = !!(
+    node?.layoutHints?.keepRowsGrouped
+    || node?.layoutHints?.preferSingleBlock
+    || ['nav', 'social', 'hero', 'product', 'legal', 'logo', 'content_group', 'header'].includes(semanticRole)
+  );
   if (tag === 'table') {
     const nestedRows = buildRowsFromTableNode(node);
-    if (nestedRows.length === 1 && (nestedRows[0].columns || []).length > 1 && column.components.length === 0) {
+    if (node?.layoutHints?.keepRowsGrouped && nestedRows.length > 0) {
+      column.nestedRows.push(...nestedRows.filter(isStructurallyMeaningfulRow));
+      addScanReasons(column, ['grouped_semantic_table_rows_preserved'], 0.82);
+    } else if (nestedRows.length === 1 && (nestedRows[0].columns || []).length > 1 && column.components.length === 0) {
       column.nestedRows.push(...nestedRows);
       addScanReasons(column, ['promoted_nested_multicolumn_via_wrapper'], 0.75);
     } else if (nestedRows.length > 0) {
       mergeNestedRowsIntoColumn(column, nestedRows, 'merged_wrapped_table');
     }
+    return;
+  }
+  if (shouldPreferStructuredChildren) {
+    (node.children || []).forEach((child) => appendNodeContentToColumn(child, column));
+    addScanReasons(column, [`semantic_children:${semanticRole || tag}`], 0.78);
     return;
   }
   if (shouldFlattenWrapper(node) || !['tr', 'td'].includes(tag)) {
@@ -174,19 +192,24 @@ const buildColumnsFromRowNode = (rowNode) => {
       const tag = `${child.tag || ''}`.toLowerCase();
       if (tag === 'table') {
         const nestedRows = buildRowsFromTableNode(child);
+        const keepRowsGrouped = !!child?.layoutHints?.keepRowsGrouped;
 
         if (
           nestedRows.length === 1
           && (nestedRows[0].columns || []).length === 1
           && (nestedRows[0].columns?.[0]?.components || []).length === 0
           && (nestedRows[0].columns?.[0]?.nestedRows || []).length > 0
+          && !keepRowsGrouped
         ) {
           column.nestedRows.push(...(nestedRows[0].columns[0].nestedRows || []));
           addScanReasons(column, ['unwrapped_single_column_table_wrapper'], 0.84);
+        } else if (keepRowsGrouped && nestedRows.length > 0) {
+          column.nestedRows.push(...nestedRows.filter(isStructurallyMeaningfulRow));
+          addScanReasons(column, ['semantic_group_rows_preserved'], 0.84);
         } else if (nestedRows.length === 1 && (nestedRows[0].columns || []).length > 1 && column.components.length === 0) {
           column.nestedRows.push(...nestedRows);
           addScanReasons(column, ['promoted_nested_multicolumn'], 0.82);
-        } else if (isComplexNestedLayout(nestedRows) && column.components.length > 0) {
+        } else if (isComplexNestedLayout(nestedRows) && column.components.length > 0 && !keepRowsGrouped) {
           appendComponentToColumn(column, createRawHtmlComponent(child));
           addScanReasons(column, ['complex_nested_table_raw_fallback'], 0.4);
         } else if (nestedRows.length > 0) {

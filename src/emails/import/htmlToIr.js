@@ -1,6 +1,62 @@
 import { COMPONENT_TYPES } from '../partials/componentTypes';
 import { DEFAULT_IR_DOCUMENT, IR_NODE_KIND, TAG_TO_COMPONENT_TYPE, createIrId } from '../ir/schema';
 
+const SEMANTIC_KEYWORDS = {
+  nav: ['nav', 'menu', 'links', 'categories', 'offers', 'contact'],
+  social: ['social', 'follow', 'facebook', 'twitter', 'instagram', 'youtube', 'linkedin'],
+  legal: ['footer', 'unsubscribe', 'manage subscription', 'report abuse', 'forward email', 'privacy'],
+  hero: ['hero', 'banner', 'intro', 'featured'],
+  product: ['product', 'bike', 'price', 'shop now', 'buy now', 'trekking', 'road', 'mountain', 'city'],
+  logo: ['logo', 'brand', 'branding'],
+  header: ['header', 'top', 'masthead'],
+};
+
+const collectNodeTokens = (el) => {
+  const tag = `${el?.tagName || ''}`.toLowerCase();
+  const id = `${el?.id || ''}`.toLowerCase();
+  const cls = `${el?.className || ''}`.toLowerCase();
+  const name = `${el?.getAttribute?.('name') || ''}`.toLowerCase();
+  const role = `${el?.getAttribute?.('role') || ''}`.toLowerCase();
+  const text = `${el?.textContent || ''}`.replace(/\s+/g, ' ').trim().toLowerCase();
+  return `${tag} ${id} ${cls} ${name} ${role} ${text}`;
+};
+
+const matchesKeywordGroup = (haystack, keywords = []) => keywords.some((keyword) => haystack.includes(keyword));
+
+const detectSemanticRole = (el, signature = {}) => {
+  if (!el || el.nodeType !== Node.ELEMENT_NODE) return '';
+  const tag = `${el.tagName || ''}`.toLowerCase();
+  const tokens = collectNodeTokens(el);
+  const directLinks = Array.from(el.querySelectorAll?.(':scope a') || []).length;
+  const directImages = Array.from(el.querySelectorAll?.(':scope img') || []).length;
+
+  if (tag === 'nav' || matchesKeywordGroup(tokens, SEMANTIC_KEYWORDS.nav) || (directLinks >= 3 && !signature.hasNestedTable)) return 'nav';
+  if (matchesKeywordGroup(tokens, SEMANTIC_KEYWORDS.social)) return 'social';
+  if (tag === 'footer' || matchesKeywordGroup(tokens, SEMANTIC_KEYWORDS.legal)) return 'legal';
+  if (tag === 'header' || matchesKeywordGroup(tokens, SEMANTIC_KEYWORDS.header)) return 'header';
+  if (matchesKeywordGroup(tokens, SEMANTIC_KEYWORDS.hero)) return 'hero';
+  if (matchesKeywordGroup(tokens, SEMANTIC_KEYWORDS.logo) || (directImages === 1 && !signature.hasText && /logo|brand/.test(tokens))) return 'logo';
+  if (matchesKeywordGroup(tokens, SEMANTIC_KEYWORDS.product)) return 'product';
+  if (tag === 'table' && signature.hasNestedTable && !signature.hasLink && !signature.hasButtonLike && !signature.hasImage) return 'wrapper';
+  if (signature.hasNestedTable && (signature.hasText || signature.hasImage || signature.hasLink)) return 'content_group';
+  return '';
+};
+
+const detectLayoutHints = (el, signature = {}, semanticRole = '') => {
+  const tag = `${el?.tagName || ''}`.toLowerCase();
+  const text = `${el?.textContent || ''}`.replace(/\s+/g, ' ').trim();
+  const linkCount = Array.from(el?.querySelectorAll?.('a') || []).length;
+  const imageCount = Array.from(el?.querySelectorAll?.('img') || []).length;
+  const directTables = Array.from(el?.children || []).filter((child) => `${child?.tagName || ''}`.toLowerCase() === 'table').length;
+  return {
+    keepRowsGrouped: ['hero', 'product', 'social', 'legal', 'content_group'].includes(semanticRole),
+    preferSingleBlock: ['logo', 'hero', 'product', 'social', 'legal'].includes(semanticRole),
+    isLikelyWrapper: semanticRole === 'wrapper' || (tag === 'table' && directTables === 1 && !text && !imageCount),
+    isLikelyNavCluster: semanticRole === 'nav' || (linkCount >= 3 && imageCount === 0),
+    isLikelyMixedMediaBlock: ((imageCount > 0 && linkCount > 0) || (imageCount > 0 && text.length > 0)),
+  };
+};
+
 const normalizeImportedUrl = (value, assetBaseUrl) => {
   if (!value) return '';
   const raw = `${value}`.trim();
@@ -280,6 +336,8 @@ const nodeFromDom = (node, ctx) => {
   const nodeId = createIrId();
   const nodePath = [...(ctx?.path || []), tag];
   const contentSignature = getContentSignature(el);
+  const semanticRole = detectSemanticRole(el, contentSignature);
+  const layoutHints = detectLayoutHints(el, contentSignature, semanticRole);
 
   const nextCtx = {
     depth: (ctx?.depth || 0) + 1,
@@ -317,6 +375,8 @@ const nodeFromDom = (node, ctx) => {
       effective: effectiveSettings,
     },
     contentSignature,
+    semanticRole,
+    layoutHints,
   };
 
   if (tag === 'img') {

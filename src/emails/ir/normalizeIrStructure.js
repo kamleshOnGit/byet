@@ -14,20 +14,122 @@ const IMAGE_LIKE_TYPES = new Set([
   COMPONENT_TYPES.IMAGE,
 ]);
 
-const promoteColumnNestedRow = (column, nestedRow) => ({
-  ...nestedRow,
-  id: createId(),
-  columns: (nestedRow.columns || []).map((nestedColumn) => ({
-    ...nestedColumn,
+const TEXT_LIKE_OR_LINK = new Set([...TEXT_LIKE_TYPES, COMPONENT_TYPES.LINK]);
+
+const VISUAL_NO_CONTENT_TYPES = new Set([
+  COMPONENT_TYPES.DIVIDER,
+  COMPONENT_TYPES.SPACER,
+  COMPONENT_TYPES.HORIZONTAL_LINE,
+].filter(Boolean));
+
+const isMeaningfulComponent = (comp) => {
+  if (!comp) return false;
+  if (VISUAL_NO_CONTENT_TYPES.has(comp.type)) return true;
+  const text = `${comp.content || ''}`.replace(/\s|&nbsp;/g, '');
+  if (text.length > 0) return true;
+  if (comp.imageUrl) return true;
+  if (comp.linkUrl) return true;
+  if (comp.htmlContent && `${comp.htmlContent}`.replace(/<[^>]+>|\s/g, '').length > 0) return true;
+  return false;
+};
+
+const columnHasMeaningfulComponents = (column) => (column?.components || []).some(isMeaningfulComponent);
+
+const liftColumnNestedRows = (column) => {
+  if (!column?.nestedRows?.length) return column;
+  const nestedComponents = column.nestedRows.flatMap((nestedRow) => (
+    (nestedRow.columns || [])
+      .flatMap((nestedColumn) => (nestedColumn.components || []).filter(isMeaningfulComponent))
+  ));
+  if (nestedComponents.length === 0) return column;
+  return {
+    ...column,
+    components: [...(column.components || []), ...nestedComponents],
+    nestedRows: [],
+  };
+};
+
+const isMeaningfulRow = (row) => {
+  if (!row) return false;
+  const columns = row.columns || [];
+  if (columns.some(columnHasMeaningfulComponents)) return true;
+  if (columns.some((column) => (column.nestedRows || []).some(isMeaningfulRow))) return true;
+  return false;
+};
+
+const rowHasSemanticGrouping = (row) => {
+  const reasons = row?._scan?.reasons || [];
+  return reasons.some((reason) => ['semantic_group_rows_preserved', 'grouped_semantic_table_rows_preserved'].includes(reason));
+};
+
+const getSingleSemanticColumn = (row) => (row?.columns?.length === 1 ? row.columns[0] : null);
+const getSingleSemanticComponents = (row) => (getSingleSemanticColumn(row)?.components || []);
+const getRowTextLength = (row) => getSingleSemanticComponents(row).reduce((sum, component) => (
+  sum + (`${component.content || ''}`.replace(/\s+/g, ' ').trim().length)
+), 0);
+const isImageOnlyRow = (row) => {
+  const components = getSingleSemanticComponents(row);
+  return components.length === 1 && IMAGE_LIKE_TYPES.has(components[0]?.type);
+};
+const isTextOnlyRow = (row) => {
+  const components = getSingleSemanticComponents(row);
+  if (components.length === 0) return false;
+  if (!components.every((component) => TEXT_LIKE_OR_LINK.has(component.type))) return false;
+  const totalLength = getRowTextLength(row);
+  return totalLength > 0 && totalLength < 200;
+};
+
+const createMergedRow = (imageRow, textRow) => {
+  const imageColumn = getSingleSemanticColumn(imageRow);
+  const textColumn = getSingleSemanticColumn(textRow);
+  if (!imageColumn || !textColumn) return imageRow;
+  const imageSize = Math.max(1, Math.min(11, Math.round((Number(imageColumn.size) || 12) / 2)));
+  const textSize = 12 - imageSize;
+  return {
+    ...imageRow,
     id: createId(),
-    settings: {
-      ...(column.settings || {}),
-      ...(nestedColumn.settings || {}),
-      padding: mergeBox(column.settings?.padding || {}, nestedColumn.settings?.padding || {}),
-      margin: mergeBox(column.settings?.margin || {}, nestedColumn.settings?.margin || {}),
+    columns: [
+      {
+        ...imageColumn,
+        size: imageSize,
+        components: [...(imageColumn.components || [])],
+        nestedRows: [],
+      },
+      {
+        ...textColumn,
+        size: textSize,
+        components: [...(textColumn.components || [])],
+        nestedRows: [],
+      },
+    ],
+    _scan: {
+      ...(imageRow._scan || createScanMeta(null, 'row')),
+      reasons: Array.from(new Set([
+        ...(imageRow._scan?.reasons || []),
+        ...(textRow._scan?.reasons || []),
+        'merged_image_text_rows',
+      ])),
     },
-  })),
-});
+  };
+};
+
+const mergeImageTextRows = (rows) => {
+  const merged = [];
+  let i = 0;
+  while (i < rows.length) {
+    const current = rows[i];
+    const next = rows[i + 1];
+    if (isImageOnlyRow(current) && next && isTextOnlyRow(next)) {
+      merged.push(createMergedRow(current, next));
+      i += 2;
+      continue;
+    }
+    merged.push(current);
+    i += 1;
+  }
+  return merged;
+};
+
 
 export const normalizeScannedRows = (rows, section) => {
   const normalized = [];
@@ -41,7 +143,10 @@ export const normalizeScannedRows = (rows, section) => {
 
     if (singleColumnWithMultipleNestedRows) {
       const wrapperColumn = row.columns[0];
-      wrapperColumn.nestedRows.forEach((nestedRow) => {
+      const nestedRowsToExpand = rowHasSemanticGrouping(row)
+        ? (wrapperColumn.nestedRows || []).filter(isMeaningfulRow)
+        : (wrapperColumn.nestedRows || []);
+      nestedRowsToExpand.forEach((nestedRow) => {
         const expandedRow = {
           ...nestedRow,
           id: createId(),
@@ -58,7 +163,7 @@ export const normalizeScannedRows = (rows, section) => {
           },
         };
         const subNormalized = normalizeScannedRows([expandedRow], section);
-        normalized.push(...subNormalized);
+        normalized.push(...subNormalized.filter(isMeaningfulRow));
       });
       return;
     }
@@ -85,10 +190,55 @@ export const normalizeScannedRows = (rows, section) => {
       }
     });
 
-    normalized.push({
+    const cleanedColumnsRaw = promotedColumns.map((column) => {
+      const filteredNestedRows = (column.nestedRows || []).filter(isMeaningfulRow);
+      const filteredComponents = (column.components || []).filter(isMeaningfulComponent);
+      if (filteredComponents.length === 0) {
+        const lifted = filteredNestedRows.flatMap((nestedRow) => (
+          (nestedRow.columns || [])
+            .filter((nestedColumn) => columnHasMeaningfulComponents(nestedColumn))
+            .flatMap((nestedColumn) => (nestedColumn.components || []).filter(isMeaningfulComponent))
+        ));
+        if (lifted.length > 0) {
+          return {
+            ...column,
+            components: lifted,
+            nestedRows: [],
+          };
+        }
+      }
+      return {
+        ...column,
+        components: filteredComponents,
+        nestedRows: filteredNestedRows,
+      };
+    });
+    const liftedColumns = cleanedColumnsRaw.map(liftColumnNestedRows);
+    const nonEmptyColumns = liftedColumns.filter(
+      (column) => (column.components || []).length > 0 || (column.nestedRows || []).length > 0,
+    );
+    const cleanedColumns = (() => {
+      if (nonEmptyColumns.length === 0) return liftedColumns;
+      if (nonEmptyColumns.length === liftedColumns.length) return liftedColumns;
+      if (nonEmptyColumns.length === cleanedColumnsRaw.length) return cleanedColumnsRaw;
+      const totalSize = nonEmptyColumns.reduce((sum, c) => sum + (Number(c.size) || 0), 0);
+      const baseSize = totalSize > 0 && totalSize <= 12
+        ? null
+        : Math.floor(12 / nonEmptyColumns.length);
+      return nonEmptyColumns.map((column, idx) => ({
+        ...column,
+        size: baseSize == null
+          ? Math.max(1, Math.round(((Number(column.size) || 1) / totalSize) * 12))
+          : (idx === nonEmptyColumns.length - 1
+              ? 12 - baseSize * (nonEmptyColumns.length - 1)
+              : baseSize),
+      }));
+    })();
+
+    const normalizedRow = {
       ...row,
       id: createId(),
-      columns: promotedColumns,
+      columns: cleanedColumns,
       _scan: {
         ...(row._scan || createScanMeta(null, 'row')),
         reasons: Array.from(new Set([
@@ -105,9 +255,56 @@ export const normalizeScannedRows = (rows, section) => {
             margin: mergeBox(section?.settings?.margin || {}, row.settings?.margin || {}),
           }
         : row.settings,
-    });
+    };
+
+    if (isMeaningfulRow(normalizedRow)) {
+      normalized.push(normalizedRow);
+    }
   });
-  return compactSingleColumnContentRuns(compactFooterRows(groupConsecutiveSingleNavRows(normalized)));
+  const flattened = flattenResidualNestedRows(normalized, section);
+  const merged = mergeImageTextRows(flattened);
+  const grouped = groupConsecutiveSingleNavRows(merged);
+  const footerCompacted = compactFooterRows(grouped);
+  const final = compactSingleColumnContentRuns(footerCompacted);
+  console.log('[normalize debug final rows]', final.map((row) => ({
+    reasons: row._scan?.reasons,
+    columns: (row.columns || []).map((column) => ({
+      size: column.size,
+      types: (column.components || []).map((component) => component.type),
+      contents: (column.components || []).map((component) => component.content),
+    })),
+  })));
+  return final;
+};
+
+const flattenResidualNestedRows = (rows, section) => {
+  const result = [];
+  rows.forEach((row) => {
+    const columns = row.columns || [];
+    const allColumnsAreNestedOnly = columns.length > 0
+      && columns.every((col) => (col.components || []).length === 0 && (col.nestedRows || []).length > 0);
+    if (allColumnsAreNestedOnly) {
+      columns.forEach((col) => {
+        const expanded = (col.nestedRows || []).filter(isMeaningfulRow).map((nested) => ({
+          ...nested,
+          id: createId(),
+          settings: {
+            ...(row.settings || {}),
+            ...(nested.settings || {}),
+          },
+          _scan: {
+            ...(nested._scan || createScanMeta(null, 'row')),
+            reasons: Array.from(new Set([...((nested._scan?.reasons) || []), 'residual_nested_flattened'])),
+          },
+        }));
+        const subFlattened = flattenResidualNestedRows(expanded, section);
+        result.push(...subFlattened);
+      });
+      return;
+    }
+    result.push(row);
+  });
+  return result.filter(isMeaningfulRow);
 };
 
 const groupConsecutiveSingleNavRows = (rows) => {
@@ -168,6 +365,27 @@ const getRowBackgroundKey = (row) => {
   return `${bg}`.toLowerCase();
 };
 
+const getRowText = (row) => (row?.columns?.[0]?.components || [])
+  .map((component) => `${component.content || ''}`.trim())
+  .filter(Boolean)
+  .join(' ');
+
+const isLikelySectionHeading = (row) => {
+  const text = getRowText(row);
+  if (!text) return false;
+  const cleaned = text.replace(/[^A-Za-z0-9 ]+/g, ' ').trim();
+  if (!cleaned || cleaned.length > 50) return false;
+  const words = cleaned.split(/\s+/).slice(0, 4);
+  if (words.length === 0) return false;
+  const uppercaseWords = words.filter((word) => word.length >= 3 && word === word.toUpperCase());
+  const capitalizedWords = words.filter((word) => /^[A-Z][a-z]/.test(word));
+  if (uppercaseWords.length / words.length >= 0.5) return true;
+  if (capitalizedWords.length >= 2) return true;
+  const keywords = new Set(['more', 'special', 'discover', 'hero', 'banner', 'offers', 'categories', 'bikes', 'kids']);
+  if (words.some((word) => keywords.has(word.toLowerCase()))) return true;
+  return false;
+};
+
 const isCompatibleSingleColumnContentRow = (row) => {
   const components = getSingleColumnComponents(row);
   if (!components || components.length === 0) return false;
@@ -200,36 +418,56 @@ const compactSingleColumnContentRuns = (rows) => {
     }
 
     const run = rows.slice(i, j);
-    const totalComponents = run.reduce((count, currentRow) => count + ((currentRow.columns?.[0]?.components || []).length), 0);
-    const hasImage = run.some((currentRow) => (currentRow.columns?.[0]?.components || []).some((component) => IMAGE_LIKE_TYPES.has(component?.type)));
-    const hasText = run.some((currentRow) => (currentRow.columns?.[0]?.components || []).some((component) => TEXT_LIKE_TYPES.has(component?.type)));
-
-    if (run.length >= 2 && totalComponents <= 6 && hasImage && hasText) {
-      const baseColumn = run[0].columns[0];
-      const mergedComponents = run.flatMap((contentRow) => (contentRow.columns[0]?.components || []).map((component) => ({
-        ...component,
-        id: createId(),
-      })));
-      result.push({
-        ...run[0],
-        id: createId(),
-        columns: [{
-          ...baseColumn,
+    const processSegment = (segmentRows) => {
+      if (!segmentRows.length) return [];
+      const totalComponents = segmentRows.reduce((count, currentRow) => count + ((currentRow.columns?.[0]?.components || []).length), 0);
+      const hasImage = segmentRows.some((currentRow) => (currentRow.columns?.[0]?.components || []).some((component) => IMAGE_LIKE_TYPES.has(component?.type)));
+      const hasText = segmentRows.some((currentRow) => (currentRow.columns?.[0]?.components || []).some((component) => TEXT_LIKE_TYPES.has(component?.type)));
+      const imageRowCount = segmentRows.filter((currentRow) => (currentRow.columns?.[0]?.components || []).every((component) => IMAGE_LIKE_TYPES.has(component?.type))).length;
+      if (segmentRows.length >= 2 && totalComponents <= 6 && hasImage && hasText && imageRowCount <= 1) {
+        const baseColumn = segmentRows[0].columns[0];
+        const mergedComponents = segmentRows.flatMap((contentRow) => (contentRow.columns[0]?.components || []).map((component) => ({
+          ...component,
           id: createId(),
-          size: 12,
-          components: mergedComponents,
-        }],
-        _scan: {
-          ...((run[0]._scan) || createScanMeta(null, 'row')),
-          reasons: Array.from(new Set([
-            ...((run[0]._scan?.reasons) || []),
-            'single_column_content_rows_compacted',
-          ])),
-        },
-      });
-    } else {
-      result.push(...run);
+        })));
+        return [{
+          ...segmentRows[0],
+          id: createId(),
+          columns: [{
+            ...baseColumn,
+            id: createId(),
+            size: 12,
+            components: mergedComponents,
+          }],
+          _scan: {
+            ...((segmentRows[0]._scan) || createScanMeta(null, 'row')),
+            reasons: Array.from(new Set([
+              ...((segmentRows[0]._scan?.reasons) || []),
+              'single_column_content_rows_compacted',
+            ])),
+          },
+        }];
+      }
+      return segmentRows;
+    };
+
+    const segmentResults = [];
+    let currentSegment = [];
+    run.forEach((contentRow) => {
+      if (isLikelySectionHeading(contentRow)) {
+        if (currentSegment.length > 0) {
+          segmentResults.push(...processSegment(currentSegment));
+          currentSegment = [];
+        }
+        segmentResults.push(contentRow);
+        return;
+      }
+      currentSegment.push(contentRow);
+    });
+    if (currentSegment.length > 0) {
+      segmentResults.push(...processSegment(currentSegment));
     }
+    result.push(...segmentResults);
     i = j;
   }
   return result;

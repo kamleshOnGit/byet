@@ -114,6 +114,8 @@ export const shouldFlattenWrapper = (node) => {
   if (!['div', 'span', 'section', 'article', 'center', 'p'].includes(tag)) return false;
 
   const sig = node.contentSignature || {};
+  const semanticRole = `${node?.semanticRole || ''}`.toLowerCase();
+  const keepGrouped = !!(node?.layoutHints?.keepRowsGrouped || node?.layoutHints?.preferSingleBlock);
   const hasOwnVisualStyle = !!(
     node?.ownSettings?.backgroundColor ||
     node?.ownSettings?.backgroundImage ||
@@ -125,6 +127,7 @@ export const shouldFlattenWrapper = (node) => {
     node?.ownSettings?.height
   );
 
+  if (keepGrouped || ['hero', 'product', 'social', 'legal', 'nav', 'logo', 'content_group'].includes(semanticRole)) return false;
   if (tag === 'div' || tag === 'center') return true;
   if (hasOwnVisualStyle) return false;
   if (sig.hasNestedTable || sig.hasButtonLike) return false;

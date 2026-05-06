@@ -11,23 +11,7 @@ import { useEditorStore } from '../editorStore';
 const isRenderableRow = (row) => {
   if (!row) return false;
   const columns = row.columns || [];
-  const hasComponents = columns.some((column) => (column.components || []).length > 0);
-  if (hasComponents) return true;
-  const hasStyledColumn = columns.some((column) => {
-    const settings = column?.settings || {};
-    return !!(
-      (settings.backgroundColor && settings.backgroundColor !== 'transparent')
-      || settings.backgroundImage
-      || (settings.border && settings.border !== 'none' && settings.borderWidth)
-    );
-  });
-  if (hasStyledColumn) return true;
-  const rowSettings = row.settings || {};
-  return !!(
-    (rowSettings.backgroundColor && rowSettings.backgroundColor !== 'transparent')
-    || rowSettings.backgroundImage
-    || (rowSettings.border && rowSettings.border !== 'none' && rowSettings.borderWidth)
-  );
+  return columns.some((column) => (column.components || []).length > 0);
 };
 
 // Droppable Section Component
@@ -183,7 +167,7 @@ const DroppableSection = ({ section, syncEditorToHtml, onSelect, selectedTarget 
           parentId={section.id}
           index={index}
           moveRow={moveRow}
-          syncEditorToHtml={syncEditorToHtml} // Pass syncEditorToHtml explicitly
+          syncEditorToHtml={syncEditorToHtml}
           onSelect={onSelect}
           selectedTarget={selectedTarget}
         />
