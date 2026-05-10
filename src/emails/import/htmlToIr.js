@@ -13,7 +13,7 @@ const SEMANTIC_KEYWORDS = {
   preheader: ['preheader', 'view in browser', 'view this email', 'web version', 'permission'],
   permission: ['permission', 'add us to address book', 'safe senders', 'view this email in your browser'],
   tracking: ['tracking', 'web beacon', 'pixel', 'open tracking'],
-  spacer: ['spacer', 'divider', 'separator', 'gap', 'line'],
+  spacer: ['spacer', 'divider', 'separator', 'gap', 'line', 'gutter'],
   // E-commerce specific
   cart: ['cart', 'basket', 'checkout', 'shop now', 'buy now', 'purchase'],
   price: ['price', 'cost', 'amount', '$', '€', '£'],
@@ -81,7 +81,8 @@ const detectLayoutHints = (el, signature = {}, semanticRole = '') => {
     isLikelyContainer: semanticRole === 'container' || (tag === 'table' && /container|wrapper|main/.test(tokens)),
     isLikelyGrid: semanticRole === 'grid' || /grid|col-|row-/.test(text),
     isLikelyTracking: semanticRole === 'tracking' || /tracking|pixel|beacon/.test(tokens),
-    shouldSkip: semanticRole === 'tracking', // Only skip tracking, not spacers
+    // Skip tracking pixels AND pure gutter/spacer TDs (no text, no images) 
+    shouldSkip: semanticRole === 'tracking' || (semanticRole === 'spacer' && !signature.hasText && !signature.hasImage && !signature.hasLink),
   };
 };
 

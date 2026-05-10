@@ -250,19 +250,19 @@ export const normalizeScannedRows = (rows, section) => {
     );
     const cleanedColumns = (() => {
       if (nonEmptyColumns.length === 0) return liftedColumns;
-      if (nonEmptyColumns.length === liftedColumns.length) return liftedColumns;
-      if (nonEmptyColumns.length === cleanedColumnsRaw.length) return cleanedColumnsRaw;
-      const totalSize = nonEmptyColumns.reduce((sum, c) => sum + (Number(c.size) || 0), 0);
-      const baseSize = totalSize > 0 && totalSize <= 12
-        ? null
-        : Math.floor(12 / nonEmptyColumns.length);
-      return nonEmptyColumns.map((column, idx) => ({
+      // Choose which columns to use: prefer nonEmpty subset, but fall back to all if counts match
+      const baseCols = nonEmptyColumns.length === liftedColumns.length
+        ? liftedColumns
+        : nonEmptyColumns;
+      // Always ensure column sizes sum to 12 so the flex layout fills full width
+      const totalSize = baseCols.reduce((sum, c) => sum + (Number(c.size) || 0), 0);
+      if (totalSize === 12) return baseCols; // already correct
+      const baseSize = Math.floor(12 / baseCols.length);
+      return baseCols.map((column, idx) => ({
         ...column,
-        size: baseSize == null
-          ? Math.max(1, Math.round(((Number(column.size) || 1) / totalSize) * 12))
-          : (idx === nonEmptyColumns.length - 1
-              ? 12 - baseSize * (nonEmptyColumns.length - 1)
-              : baseSize),
+        size: idx === baseCols.length - 1
+          ? 12 - baseSize * (baseCols.length - 1)
+          : baseSize,
       }));
     })();
 
@@ -293,6 +293,19 @@ export const normalizeScannedRows = (rows, section) => {
     }
   });
   const flattened = flattenResidualNestedRows(normalized, section);
+  // TEMP DEBUG: log rows with 'awesome' text and product rows
+  flattened.forEach((row, ri) => {
+    const cols = row.columns || [];
+    const hasBike = cols.some((c) => (c.components || []).some((cp) => cp.imageUrl && cp.imageUrl.includes('Bike')));
+    if (hasBike) {
+      console.log('[DIAG product row]', ri, 'cols:', cols.length, 'sizes:', cols.map((c) => c.size).join(','));
+    }
+    const hasAwesome = cols.some((c) => (c.components || []).some((cp) => (`${cp.content || ''}`).includes('awesome')));
+    if (hasAwesome) {
+      const awesomeComp = cols.flatMap((c) => c.components||[]).find((cp) => (`${cp.content||''}`).includes('awesome'));
+      console.log('[DIAG awesome row]', ri, 'sizes:', cols.map((c) => c.size).join(','), 'compColor:', awesomeComp?.settings?.color, 'compSettings:', JSON.stringify(awesomeComp?.settings));
+    }
+  });
   const merged = mergeImageTextRows(flattened);
   const grouped = groupConsecutiveSingleNavRows(merged);
   const footerCompacted = compactFooterRows(grouped);

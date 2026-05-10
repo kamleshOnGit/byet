@@ -140,11 +140,16 @@ export const applyComponentSettings = (target, irNode, kind = 'text') => {
   if (!target || !irNode) return;
   const effective = getEffectiveSettings(irNode);
   const subset = pickSettings(effective, kind === 'media' ? MEDIA_STYLE_KEYS : TEXT_STYLE_KEYS);
+  const own = irNode?.styleMap?.own || irNode?.ownSettings || {};
   target.settings = {
     ...(target.settings || {}),
     ...subset,
     padding: mergeBox(target.settings?.padding || {}, subset.padding || {}),
     margin: mergeBox(target.settings?.margin || {}, subset.margin || {}),
+    // Own textColor/backgroundColor take priority over cascaded effective values —
+    // a span with explicit color:#000 must not be overridden by an ancestor's color:#fff.
+    ...(own.textColor ? { textColor: own.textColor } : {}),
+    ...(own.backgroundColor ? { backgroundColor: own.backgroundColor } : {}),
   };
 };
 
