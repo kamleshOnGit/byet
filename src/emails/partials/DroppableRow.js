@@ -77,21 +77,17 @@ const DroppableRow = ({ row, parentId, index, moveRow, syncEditorToHtml, onSelec
         out.margin = `${top}px ${right}px ${bottom}px ${left}px`;
       }
     }
-    if (s.border && s.border !== 'none' && s.borderWidth) {
-      out.border = `${s.borderWidth}px ${s.border} ${s.borderColor || '#000000'}`;
-    }
+    // Do NOT apply imported border styles to editor rows — they come from HTML source
+    // elements like table wrappers and produce wrong white/colored borders in the editor.
     if (s.textAlign) {
       out.textAlign = s.textAlign;
     }
     if (s.boxSizing) {
       out.boxSizing = s.boxSizing;
     }
-    if (s.width) {
-      out.width = s.width;
-    }
-    if (s.height) {
-      out.height = s.height;
-    }
+    // Do NOT apply imported width/height to editor rows — rows should always
+    // span full width. Explicit pixel values from HTML table attrs collapse
+    // the row to a tiny size in the editor's flex layout.
     if (s.minHeight) {
       out.minHeight = s.minHeight;
     }
@@ -121,12 +117,8 @@ const DroppableRow = ({ row, parentId, index, moveRow, syncEditorToHtml, onSelec
     } else if (s.borderRadius === 0) {
       out.borderRadius = '0px';
     }
-    if (s.float) {
-      out.float = s.float;
-    }
-    if (s.display) {
-      out.display = s.display;
-    }
+    // Note: don't apply float or display from imported settings — they break
+    // the flex-based editor row layout (rowStyle uses display:flex).
     if (s.justifyContent) {
       out.justifyContent = s.justifyContent;
     }

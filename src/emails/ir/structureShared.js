@@ -4,7 +4,17 @@ import { IR_NODE_KIND } from './schema';
 
 export const createId = () => Date.now() + Math.floor(Math.random() * 100000);
 
-export const mergeBox = (base = {}, extra = {}) => ({ ...(base || {}), ...(extra || {}) });
+export const mergeBox = (base = {}, extra = {}) => {
+  const merged = { ...(base || {}), ...(extra || {}) };
+  
+  // Handle individual box model properties if shorthand not provided
+  if (extra.top !== undefined) merged.top = extra.top;
+  if (extra.right !== undefined) merged.right = extra.right;
+  if (extra.bottom !== undefined) merged.bottom = extra.bottom;
+  if (extra.left !== undefined) merged.left = extra.left;
+  
+  return merged;
+};
 
 const TEXT_STYLE_KEYS = [
   'fontSize',
@@ -37,6 +47,25 @@ const TEXT_STYLE_KEYS = [
   'opacity',
   'boxSizing',
   'verticalAlign',
+  // Additional important properties
+  'position',
+  'top',
+  'right',
+  'bottom',
+  'left',
+  'zIndex',
+  'transform',
+  'transformOrigin',
+  'textShadow',
+  'boxShadow',
+  'filter',
+  'cursor',
+  'transition',
+  'animation',
+  'visibility',
+  'clear',
+  'objectFit',
+  'objectPosition',
 ];
 
 const MEDIA_STYLE_KEYS = [
@@ -61,6 +90,18 @@ const MEDIA_STYLE_KEYS = [
   'opacity',
   'boxSizing',
   'verticalAlign',
+  // Additional media properties
+  'position',
+  'top',
+  'right',
+  'bottom',
+  'left',
+  'objectFit',
+  'objectPosition',
+  'filter',
+  'transform',
+  'cursor',
+  'transition',
 ];
 
 const pickSettings = (settings = {}, keys = []) => {
@@ -80,11 +121,18 @@ export const getEffectiveSettings = (node) => ({
 export const applyEffectiveSettings = (target, irNode) => {
   if (!target || !irNode) return;
   const effective = getEffectiveSettings(irNode);
+  
+  // Deep merge settings to preserve all style information
   target.settings = {
     ...(target.settings || {}),
     ...effective,
     padding: mergeBox(target.settings?.padding || {}, effective.padding || {}),
     margin: mergeBox(target.settings?.margin || {}, effective.margin || {}),
+    // Preserve individual border properties if border shorthand exists
+    ...(effective.border && !target.settings?.borderTop ? { borderTop: effective.border } : {}),
+    ...(effective.border && !target.settings?.borderRight ? { borderRight: effective.border } : {}),
+    ...(effective.border && !target.settings?.borderBottom ? { borderBottom: effective.border } : {}),
+    ...(effective.border && !target.settings?.borderLeft ? { borderLeft: effective.border } : {}),
   };
 };
 
@@ -127,10 +175,37 @@ export const shouldFlattenWrapper = (node) => {
     node?.ownSettings?.height
   );
 
-  if (keepGrouped || ['hero', 'product', 'social', 'legal', 'nav', 'logo', 'content_group'].includes(semanticRole)) return false;
-  if (tag === 'div' || tag === 'center') return true;
+  // Skip tracking and spacer elements
+  if (node?.layoutHints?.shouldSkip) return true;
+
+  // Be more conservative - preserve more structure
+  if (['hero', 'product', 'social', 'legal', 'nav', 'logo', 'content_group', 'container', 'grid'].includes(semanticRole)) return false;
+  
+  // Enhanced style detection for layout-critical wrappers
+  const hasLayoutCriticalStyle = !!(
+    node?.ownSettings?.display?.includes('grid') ||
+    node?.ownSettings?.display?.includes('flex') ||
+    node?.ownSettings?.position !== 'static' ||
+    node?.ownSettings?.float ||
+    node?.ownSettings?.clear
+  );
+  
+  if (hasLayoutCriticalStyle) return false;
+
+  if (keepGrouped) return false;
+  
+  // Be more conservative about flattening divs - preserve structure
+  if (tag === 'div') {
+    // Only flatten simple divs without meaningful content
+    if (hasOwnVisualStyle) return false;
+    if (sig.hasNestedTable) return false;
+    if (sig.hasButtonLike) return false;
+    // Flatten only if it's a simple wrapper
+    return !sig.hasText && !sig.hasImage && !sig.hasLink;
+  }
+  
+  if (tag === 'center') return true;
   if (hasOwnVisualStyle) return false;
-  if (sig.hasNestedTable || sig.hasButtonLike) return false;
   if (tag === 'p') return false;
   return true;
 };
@@ -235,7 +310,33 @@ export const createComponentFromIr = (node) => {
   }
 
   if (componentType === COMPONENT_TYPES.PARAGRAPH || componentType === COMPONENT_TYPES.SPAN || componentType === COMPONENT_TYPES.HEADER_1 || componentType === COMPONENT_TYPES.HEADER_2 || componentType === COMPONENT_TYPES.HEADER_3 || componentType === COMPONENT_TYPES.HEADER) {
-    comp.content = node.props?.text || node.children?.map((child) => child.text || child.props?.text || '').join(' ') || '';
+    // Fix: Preserve text boundaries and avoid incorrect merging
+    let content = node.props?.text || '';
+    
+    if (!content && node.children && node.children.length > 0) {
+      // Extract text from children while preserving structure
+      const childTexts = node.children.map((child) => {
+        if (child.kind === 'text') {
+          return child.text || '';
+        } else if (child.props?.text) {
+          return child.props.text;
+        } else if (child.children && child.children.length > 0) {
+          // Recursively extract from nested children
+          return child.children.map((nestedChild) => {
+            if (nestedChild.kind === 'text') {
+              return nestedChild.text || '';
+            }
+            return nestedChild.props?.text || '';
+          }).filter(Boolean).join(' ');
+        }
+        return '';
+      }).filter(Boolean);
+      
+      // Join with proper spacing but don't over-merge
+      content = childTexts.join(' ').trim();
+    }
+    
+    comp.content = content;
     if (ownSettings.color) {
       comp.settings.color = ownSettings.color;
     } else {

@@ -89,6 +89,21 @@ const appendComponentToColumn = (column, component) => {
   column.components.push(component);
 };
 
+const collectNodeText = (node) => {
+  if (!node) return '';
+  if (node.kind === IR_NODE_KIND.TEXT) return node.text || '';
+  if (node.kind === IR_NODE_KIND.COMPONENT) {
+    if (node.type === 'Img') return '';
+    return node.props?.text || node.text || '';
+  }
+  return (node.children || [])
+    .map(collectNodeText)
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
 const isComplexNestedLayout = (rows = []) => {
   if (!Array.isArray(rows) || rows.length === 0) return false;
   if (rows.length > 1) return true;
@@ -108,19 +123,58 @@ const shouldConvertNodeToRawHtml = (node) => {
   const tag = `${node.tag || ''}`.toLowerCase();
   if (['table', 'tr', 'td', 'tbody', 'thead', 'tfoot', 'body', 'html'].includes(tag)) return false;
   if (node?.layoutHints?.keepRowsGrouped || node?.layoutHints?.preferSingleBlock) return false;
-  if (['nav', 'social', 'hero', 'product', 'legal', 'logo', 'content_group', 'header'].includes(`${node?.semanticRole || ''}`.toLowerCase())) return false;
+  
+  // Be more permissive - only convert to raw HTML as last resort
+  const semanticRole = `${node?.semanticRole || ''}`.toLowerCase();
+  if (['nav', 'social', 'hero', 'product', 'legal', 'logo', 'content_group', 'header'].includes(semanticRole)) return false;
+  
   if (shouldFlattenWrapper(node)) return false;
+  
   const sig = node.contentSignature || {};
-  const hasComplexContent = sig.hasNestedTable || (sig.hasStyledNode && (sig.hasBlockWrapper || sig.hasInlineWrapper));
-  return !!(hasComplexContent && hasRenderableContentSignature(node));
+  // Only use raw HTML if extremely complex and no other option
+  const hasExtremelyComplexContent = sig.hasNestedTable && sig.hasStyledNode && sig.hasBlockWrapper && sig.hasInlineWrapper;
+  const hasRenderableContent = hasRenderableContentSignature(node);
+  
+  // Higher threshold for raw HTML - only if truly unparseable
+  return !!(hasExtremelyComplexContent && hasRenderableContent && sig.tags.length > 8);
 };
 
 const appendNodeContentToColumn = (node, column) => {
   if (!node || !column) return;
+  
+  // Skip tracking and spacer elements
+  if (node?.layoutHints?.shouldSkip) {
+    addScanReasons(column, ['skipped_tracking_or_spacer'], 0.95);
+    return;
+  }
+  
   if (node.kind === IR_NODE_KIND.COMPONENT) {
     appendComponentToColumn(column, createComponentFromIr(node));
     addScanReasons(column, [`component:${node.type || 'unknown'}`], 0.9);
     return;
+  }
+  
+  // Try to parse complex structures more deeply before falling back
+  if (node.kind === IR_NODE_KIND.ELEMENT) {
+    const tag = `${node.tag || ''}`.toLowerCase();
+    const sig = node.contentSignature || {};
+    
+    // For complex divs with mixed content, try to parse children first
+    if (tag === 'div' && sig.hasNestedTable && (sig.hasText || sig.hasImage)) {
+      const hasMeaningfulChildren = (node.children || []).some(child => 
+        child.kind === IR_NODE_KIND.COMPONENT || 
+        (child.kind === IR_NODE_KIND.TEXT && isMeaningfulText(child.text)) ||
+        (child.kind === IR_NODE_KIND.ELEMENT && hasRenderableContentSignature(child))
+      );
+      
+      if (hasMeaningfulChildren) {
+        (node.children || []).forEach((child) => {
+          appendNodeContentToColumn(child, column);
+        });
+        addScanReasons(column, ['parsed_complex_div_structure'], 0.75);
+        return;
+      }
+    }
   }
   if (node.kind === IR_NODE_KIND.TEXT && isMeaningfulText(node.text)) {
     appendComponentToColumn(column, createTextComponent(node));
@@ -148,7 +202,18 @@ const appendNodeContentToColumn = (node, column) => {
       column.nestedRows.push(...nestedRows);
       addScanReasons(column, ['promoted_nested_multicolumn_via_wrapper'], 0.75);
     } else if (nestedRows.length > 0) {
-      mergeNestedRowsIntoColumn(column, nestedRows, 'merged_wrapped_table');
+      // Be more conservative about flattening tables - preserve structure
+      const hasComplexStructure = nestedRows.some(row => 
+        (row.columns || []).length > 1 || 
+        row.columns.some(col => (col.components || []).length > 1)
+      );
+      
+      if (hasComplexStructure) {
+        column.nestedRows.push(...nestedRows.filter(isStructurallyMeaningfulRow));
+        addScanReasons(column, ['preserved_complex_table_structure'], 0.78);
+      } else {
+        mergeNestedRowsIntoColumn(column, nestedRows, 'merged_simple_table');
+      }
     }
     return;
   }
@@ -183,7 +248,6 @@ const buildColumnsFromRowNode = (rowNode) => {
   const tdNodes = collectMeaningfulChildren(rowNode, (tag) => tag === 'td');
   const columnNodes = tdNodes.length > 0 ? tdNodes : [rowNode];
   const siblingCount = columnNodes.length;
-
   return columnNodes.map((columnNode) => {
     const column = createStructureColumn(columnNode, inferColumnSize(columnNode, siblingCount));
     addScanReasons(column, [tdNodes.length > 0 ? 'direct_td_column' : 'synthetic_single_column'], tdNodes.length > 0 ? 0.9 : 0.7);
@@ -227,6 +291,18 @@ const buildColumnsFromRowNode = (rowNode) => {
         appendNodeContentToColumn(child, column);
       }
     });
+
+    if ((column.components || []).length === 0 && (column.nestedRows || []).length === 0) {
+      const fallbackText = collectNodeText(columnNode);
+      if (isMeaningfulText(fallbackText)) {
+        appendComponentToColumn(column, createTextComponent({
+          ...columnNode,
+          kind: IR_NODE_KIND.TEXT,
+          text: fallbackText,
+        }));
+        addScanReasons(column, ['fallback_text_from_empty_cell'], 0.62);
+      }
+    }
 
     return column;
   }).filter(isColumnMeaningful);

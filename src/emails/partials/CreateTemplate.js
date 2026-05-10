@@ -60,6 +60,7 @@ const CreateTemplate = () => {
 
   // Wrap syncEditorToHtml in useCallback to prevent it from changing on every render
   const syncEditorToHtml = useCallback(() => {
+    try {
     const escapeHtml = (text) => {
       if (!text) return '';
       return `${text}`
@@ -308,7 +309,7 @@ const CreateTemplate = () => {
       return `<${tagName} style="margin:0;${makeTextStyle(s)}${extraStyle}">${renderRichText(content)}</${tagName}>`;
     };
 
-    const renderComponent = (component) => {
+    const renderComponent = (component, isNested = false) => {
       const s = component?.settings || {};
       const wrapperStyle = [
         makeBoxStyle(s, { includePadding: true, includeMargin: false, includeText: false, includeBackground: true, includeDimensions: true, includeDisplay: false, includeFloat: false, includeFlex: false }),
@@ -317,7 +318,7 @@ const CreateTemplate = () => {
       const safeBlockStyle = makeBoxStyle(s, { includeBackground: true, includePadding: true, includeBorder: true, includeRadius: true, includeDisplay: false, includeFloat: false, includeFlex: false });
       const spacerAfter = Number.isFinite(s?.margin?.bottom) ? s.margin.bottom : 0;
 
-      const wrap = (inner) => `
+      const wrap = (inner) => isNested ? inner : `
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
           <tr>
             <td>
@@ -390,7 +391,7 @@ const CreateTemplate = () => {
                   <tr style="${tableRow.settings?.height ? `height:${escapeHtml(tableRow.settings.height)};` : ''}${tableRow.settings?.backgroundColor && tableRow.settings.backgroundColor !== 'transparent' ? `background-color:${escapeHtml(tableRow.settings.backgroundColor)};` : ''}${tableRow.settings?.textAlign ? `text-align:${escapeHtml(tableRow.settings.textAlign)};` : ''}">
                     ${(tableRow.cells || []).map((cell) => `
                       <td colspan="${Math.max(1, Number.parseInt(cell.colSpan, 10) || 1)}" rowspan="${Math.max(1, Number.parseInt(cell.rowSpan, 10) || 1)}" style="width:${escapeHtml(cell.settings?.width || cell.width || `${Math.floor(100 / ((tableRow.cells || []).length || 1))}%`)};vertical-align:${escapeHtml(cell.settings?.verticalAlign || 'top')};padding:${Number.parseInt(tableSettings.cellPadding, 10) || 0}px;${cell.settings?.border && cell.settings?.border !== 'none' && cell.settings?.borderWidth ? `border:${cell.settings.borderWidth}px ${escapeHtml(cell.settings.border)} ${escapeHtml(cell.settings.borderColor || '#000000')};` : 'border:1px solid #e9d8fd;'}${cell.settings?.backgroundColor && cell.settings.backgroundColor !== 'transparent' ? `background-color:${escapeHtml(cell.settings.backgroundColor)};` : ''}${cell.settings?.height ? `height:${escapeHtml(cell.settings.height)};` : ''}${cell.settings?.minHeight ? `min-height:${escapeHtml(cell.settings.minHeight)};` : ''}${cell.settings?.textAlign ? `text-align:${escapeHtml(cell.settings.textAlign)};` : ''}${cell.settings?.textColor ? `color:${escapeHtml(cell.settings.textColor)};` : ''}${cell.settings?.fontSize ? `font-size:${escapeHtml(cell.settings.fontSize)};` : ''}${cell.settings?.fontWeight ? `font-weight:${escapeHtml(cell.settings.fontWeight)};` : ''}${cell.settings?.fontFamily ? `font-family:${escapeHtml(cell.settings.fontFamily)};` : ''}">
-                        <div style="width:100%;${cell.settings?.textAlign ? `text-align:${escapeHtml(cell.settings.textAlign)};` : ''}${cell.settings?.textColor ? `color:${escapeHtml(cell.settings.textColor)};` : ''}${cell.settings?.fontSize ? `font-size:${escapeHtml(cell.settings.fontSize)};` : ''}${cell.settings?.fontWeight ? `font-weight:${escapeHtml(cell.settings.fontWeight)};` : ''}${cell.settings?.fontFamily ? `font-family:${escapeHtml(cell.settings.fontFamily)};` : ''}${cell.settings?.lineHeight ? `line-height:${escapeHtml(cell.settings.lineHeight)};` : ''}">${(cell.components || []).map((nestedComponent) => renderComponent(nestedComponent)).join('') || '&nbsp;'}</div>
+                        <div style="width:100%;${cell.settings?.textAlign ? `text-align:${escapeHtml(cell.settings.textAlign)};` : ''}${cell.settings?.textColor ? `color:${escapeHtml(cell.settings.textColor)};` : ''}${cell.settings?.fontSize ? `font-size:${escapeHtml(cell.settings.fontSize)};` : ''}${cell.settings?.fontWeight ? `font-weight:${escapeHtml(cell.settings.fontWeight)};` : ''}${cell.settings?.fontFamily ? `font-family:${escapeHtml(cell.settings.fontFamily)};` : ''}${cell.settings?.lineHeight ? `line-height:${escapeHtml(cell.settings.lineHeight)};` : ''}">${(cell.components || []).map((nestedComponent) => renderComponent(nestedComponent, true)).join('') || '&nbsp;'}</div>
                       </td>
                     `).join('')}
                   </tr>
@@ -559,38 +560,19 @@ const CreateTemplate = () => {
       </html>
     `;
 
-    setHtmlContent(html);
+      setHtmlContent(html);
+    } catch (error) {
+      console.error('Error generating HTML:', error);
+      setHtmlContent('<div>Error generating HTML preview. Please check your template structure.</div>');
+    }
   }, [sections, templateSettings]);
 
-  useEffect(() => {
-    console.log('Sections updated, syncing HTML...'); // Log when sections are updated
-    syncEditorToHtml();
-  }, [sections, syncEditorToHtml]);
 
-  // Ensure proper synchronization and rendering in browser view
-  useEffect(() => {
-    // Only sync when sections change or when switching to browser view
-    if (isBrowserView) {
-      syncEditorToHtml();
-    }
-  }, [sections, isBrowserView, syncEditorToHtml]);
-
-  useEffect(() => {
-    // Ensure editor view syncs only when toggled
-    if (isEditorView) {
-      syncEditorToHtml();
-    }
-  }, [isEditorView, syncEditorToHtml]);
-
-  // Generate initial HTML content immediately after initializing sections
+  // Single useEffect to handle HTML synchronization when sections or template settings change
   useEffect(() => {
     syncEditorToHtml();
-  }, [syncEditorToHtml]);
+  }, [sections, templateSettings, syncEditorToHtml]);
 
-  // Debugging: Log the generated HTML content
-  useEffect(() => {
-    console.log("Generated HTML Content:", htmlContent);
-  }, [htmlContent]);
 
   // Define handleSaveTemplate to save template state to localStorage and download the generated HTML as an .html file
   const handleSaveTemplate = () => {
@@ -601,8 +583,10 @@ const CreateTemplate = () => {
         savedAt: new Date().toISOString(),
       };
       window.localStorage.setItem('byet.emailTemplate', JSON.stringify(payload));
+      alert('Template saved successfully to localStorage!');
     } catch (e) {
       console.error('Failed to save template to localStorage:', e);
+      alert('Failed to save template to localStorage: ' + e.message);
     }
 
     try {
@@ -615,8 +599,10 @@ const CreateTemplate = () => {
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
+      alert('HTML file downloaded successfully!');
     } catch (e) {
       console.error('Failed to download HTML:', e);
+      alert('Failed to download HTML: ' + e.message);
     }
   };
 

@@ -2,13 +2,26 @@ import { COMPONENT_TYPES } from '../partials/componentTypes';
 import { DEFAULT_IR_DOCUMENT, IR_NODE_KIND, TAG_TO_COMPONENT_TYPE, createIrId } from '../ir/schema';
 
 const SEMANTIC_KEYWORDS = {
-  nav: ['nav', 'menu', 'links', 'categories', 'offers', 'contact'],
+  nav: ['nav', 'menu', 'links', 'categories', 'offers', 'contact', 'hotel'],
   social: ['social', 'follow', 'facebook', 'twitter', 'instagram', 'youtube', 'linkedin'],
   legal: ['footer', 'unsubscribe', 'manage subscription', 'report abuse', 'forward email', 'privacy'],
-  hero: ['hero', 'banner', 'intro', 'featured'],
-  product: ['product', 'bike', 'price', 'shop now', 'buy now', 'trekking', 'road', 'mountain', 'city'],
+  hero: ['hero', 'banner', 'intro', 'featured', 'city bike'],
+  product: ['product', 'bike', 'price', 'shop now', 'buy now', 'trekking', 'road', 'mountain', 'city', 'add to cart'],
   logo: ['logo', 'brand', 'branding'],
   header: ['header', 'top', 'masthead'],
+  // Email-specific additions
+  preheader: ['preheader', 'view in browser', 'view this email', 'web version', 'permission'],
+  permission: ['permission', 'add us to address book', 'safe senders', 'view this email in your browser'],
+  tracking: ['tracking', 'web beacon', 'pixel', 'open tracking'],
+  spacer: ['spacer', 'divider', 'separator', 'gap', 'line'],
+  // E-commerce specific
+  cart: ['cart', 'basket', 'checkout', 'shop now', 'buy now', 'purchase'],
+  price: ['price', 'cost', 'amount', '$', '€', '£'],
+  product_card: ['product', 'item', 'sku', 'add to cart', 'shop now'],
+  // Layout specific
+  container: ['container', 'wrapper', 'main-content', 'body-content', 'main column'],
+  grid: ['grid', 'row', 'column', 'col-'],
+  card: ['card', 'box', 'panel'],
 };
 
 const collectNodeTokens = (el) => {
@@ -37,6 +50,16 @@ const detectSemanticRole = (el, signature = {}) => {
   if (matchesKeywordGroup(tokens, SEMANTIC_KEYWORDS.hero)) return 'hero';
   if (matchesKeywordGroup(tokens, SEMANTIC_KEYWORDS.logo) || (directImages === 1 && !signature.hasText && /logo|brand/.test(tokens))) return 'logo';
   if (matchesKeywordGroup(tokens, SEMANTIC_KEYWORDS.product)) return 'product';
+  if (matchesKeywordGroup(tokens, SEMANTIC_KEYWORDS.preheader)) return 'preheader';
+  if (matchesKeywordGroup(tokens, SEMANTIC_KEYWORDS.permission)) return 'permission';
+  if (matchesKeywordGroup(tokens, SEMANTIC_KEYWORDS.tracking)) return 'tracking';
+  if (matchesKeywordGroup(tokens, SEMANTIC_KEYWORDS.spacer)) return 'spacer';
+  if (matchesKeywordGroup(tokens, SEMANTIC_KEYWORDS.cart)) return 'cart';
+  if (matchesKeywordGroup(tokens, SEMANTIC_KEYWORDS.price)) return 'price';
+  if (matchesKeywordGroup(tokens, SEMANTIC_KEYWORDS.product_card)) return 'product_card';
+  if (matchesKeywordGroup(tokens, SEMANTIC_KEYWORDS.container)) return 'container';
+  if (matchesKeywordGroup(tokens, SEMANTIC_KEYWORDS.grid)) return 'grid';
+  if (matchesKeywordGroup(tokens, SEMANTIC_KEYWORDS.card)) return 'card';
   if (tag === 'table' && signature.hasNestedTable && !signature.hasLink && !signature.hasButtonLike && !signature.hasImage) return 'wrapper';
   if (signature.hasNestedTable && (signature.hasText || signature.hasImage || signature.hasLink)) return 'content_group';
   return '';
@@ -45,15 +68,20 @@ const detectSemanticRole = (el, signature = {}) => {
 const detectLayoutHints = (el, signature = {}, semanticRole = '') => {
   const tag = `${el?.tagName || ''}`.toLowerCase();
   const text = `${el?.textContent || ''}`.replace(/\s+/g, ' ').trim();
+  const tokens = collectNodeTokens(el);
   const linkCount = Array.from(el?.querySelectorAll?.('a') || []).length;
   const imageCount = Array.from(el?.querySelectorAll?.('img') || []).length;
   const directTables = Array.from(el?.children || []).filter((child) => `${child?.tagName || ''}`.toLowerCase() === 'table').length;
   return {
-    keepRowsGrouped: ['hero', 'product', 'social', 'legal', 'content_group'].includes(semanticRole),
-    preferSingleBlock: ['logo', 'hero', 'product', 'social', 'legal'].includes(semanticRole),
+    keepRowsGrouped: ['hero', 'product', 'social', 'legal', 'content_group', 'product_card', 'card'].includes(semanticRole),
+    preferSingleBlock: ['logo', 'hero', 'product', 'social', 'legal', 'preheader', 'permission'].includes(semanticRole),
     isLikelyWrapper: semanticRole === 'wrapper' || (tag === 'table' && directTables === 1 && !text && !imageCount),
     isLikelyNavCluster: semanticRole === 'nav' || (linkCount >= 3 && imageCount === 0),
     isLikelyMixedMediaBlock: ((imageCount > 0 && linkCount > 0) || (imageCount > 0 && text.length > 0)),
+    isLikelyContainer: semanticRole === 'container' || (tag === 'table' && /container|wrapper|main/.test(tokens)),
+    isLikelyGrid: semanticRole === 'grid' || /grid|col-|row-/.test(text),
+    isLikelyTracking: semanticRole === 'tracking' || /tracking|pixel|beacon/.test(tokens),
+    shouldSkip: semanticRole === 'tracking', // Only skip tracking, not spacers
   };
 };
 
@@ -278,6 +306,28 @@ const parseInlineSettings = (el, assetBaseUrl) => {
 
   const boxSizing = styleValue(style, 'box-sizing');
   if (boxSizing) out.boxSizing = boxSizing;
+  const position = styleValue(style, 'position');
+  if (position) out.position = position;
+  const top = styleValue(style, 'top');
+  if (top) out.top = top;
+  const right = styleValue(style, 'right');
+  if (right) out.right = right;
+  const bottom = styleValue(style, 'bottom');
+  if (bottom) out.bottom = bottom;
+  const left = styleValue(style, 'left');
+  if (left) out.left = left;
+  const zIndex = styleValue(style, 'z-index');
+  if (zIndex) out.zIndex = zIndex;
+  const clear = styleValue(style, 'clear');
+  if (clear) out.clear = clear;
+  const transform = styleValue(style, 'transform');
+  if (transform) out.transform = transform;
+  const boxShadow = styleValue(style, 'box-shadow');
+  if (boxShadow) out.boxShadow = boxShadow;
+  const gridTemplateColumns = styleValue(style, 'grid-template-columns');
+  if (gridTemplateColumns) out.gridTemplateColumns = gridTemplateColumns;
+  const gap = styleValue(style, 'gap');
+  if (gap) out.gap = gap;
 
   return out;
 };
@@ -291,9 +341,9 @@ const nodeFromDom = (node, ctx) => {
 
   if (node.nodeType === Node.TEXT_NODE) {
     const t = `${node.textContent || ''}`;
-    const trimmed = t.replace(/\s+/g, ' ');
-    if (!trimmed.trim()) return null;
-    const parentPath = ctx?.path || [];
+    const trimmed = t.replace(/[ \t]+/g, ' ').replace(/[\n\r]+/g, ' ').trim();
+    if (!trimmed) return null;
+    const parentPath = ctx?.path || []; 
     return {
       id: createIrId(),
       kind: IR_NODE_KIND.TEXT,

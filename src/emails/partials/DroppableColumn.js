@@ -18,13 +18,8 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, syncEditorToHtml, o
       }
       const newComponent = createComponentInstance(item.type);
       addComponentToColumn(parentId, rowId, column.id, newComponent);
+      syncEditorToHtml();
 
-      // Ensure HTML is synchronized after the drop event
-      if (typeof syncEditorToHtml === 'function') {
-        syncEditorToHtml();
-      } else {
-        console.error('syncEditorToHtml is not a function');
-      }
 
       return { droppedInColumn: true };
     },
@@ -71,9 +66,8 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, syncEditorToHtml, o
         out.margin = `${top}px ${right}px ${bottom}px ${left}px`;
       }
     }
-    if (s.border && s.border !== 'none' && s.borderWidth) {
-      out.border = `${s.borderWidth}px ${s.border} ${s.borderColor || '#000000'}`;
-    }
+    // Do NOT apply imported border styles to editor columns — they come from HTML source
+    // elements like table wrappers and produce wrong white/colored borders in the editor.
     if (s.borderRadius || s.borderRadius === 0) {
       out.borderRadius = `${s.borderRadius}px`;
     }
@@ -83,12 +77,8 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, syncEditorToHtml, o
     if (s.boxSizing) {
       out.boxSizing = s.boxSizing;
     }
-    if (s.display) {
-      out.display = s.display;
-    }
-    if (s.float) {
-      out.float = s.float;
-    }
+    // Note: don't apply float or display from imported settings here — they break
+    // the flex-based editor column layout. The row uses display:flex with flex children.
     if (s.alignSelf) {
       out.alignSelf = s.alignSelf;
     }
@@ -107,18 +97,8 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, syncEditorToHtml, o
     if (s.overflow) {
       out.overflow = s.overflow;
     }
-    if (s.width) {
-      out.width = s.width;
-    }
-    if (s.minWidth) {
-      out.minWidth = s.minWidth;
-    }
-    if (s.maxWidth) {
-      out.maxWidth = s.maxWidth;
-    }
-    if (s.height) {
-      out.height = s.height;
-    }
+    // Do NOT apply imported width/height to editor columns — column width
+    // is controlled by col.size (flex layout), not inherited CSS pixel values.
     if (s.minHeight) {
       out.minHeight = s.minHeight;
     }

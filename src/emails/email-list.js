@@ -210,6 +210,10 @@ const EmailList = () => {
     if (!file) return;
 
     try {
+      if (!file.name.match(/\.(html|htm)$/i)) {
+        alert('Please select an HTML file');
+        return;
+      }
       const text = await file.text();
       const assetBaseUrl = getImportedFileBaseUrl(file) || getSavedFromBaseUrl(text);
       let importedSections;
@@ -235,27 +239,15 @@ const EmailList = () => {
         : parsedTemplate.templateSettings;
 
       const structureComparison = compareStructures(legacySections || [], mappedIrSections || []);
-      if (mappedIrSections.length > 0) {
-        console.log('Import structure compare:', structureComparison);
-        console.log('IR scan diagnostics:', irScan?.diagnostics || {});
-      }
+
 
       const irLooksUsable = hasRenderableImportedContent(mappedIrSections);
       const irStructurallyClose = shouldUseIrSections(structureComparison, mappedIrSections);
       const useIrSections = irLooksUsable;
       if (useIrSections) {
         importedSections = normalizeImportedSectionsUrls(mappedIrSections, assetBaseUrl);
-        console.log('Using IR-mapped import structure as active path', {
-          closeToLegacy: irStructurallyClose,
-          comparison: structureComparison,
-        });
       } else {
         importedSections = normalizeImportedSectionsUrls(legacySections, assetBaseUrl);
-        console.log('Falling back to legacy import structure because IR output is unusable or structurally worse', {
-          irLooksUsable,
-          irStructurallyClose,
-          comparison: structureComparison,
-        });
       }
 
       if (!importedSections) return;

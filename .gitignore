@@ -7,6 +7,30 @@
 
 # testing
 /coverage
+/tests
+/playwright.config.js
+/import-test
+/original-browser
+/test-*.js
+/test-*.html
+/test-*.md
+*TESTING*.md
+*REPORT*.md
+*SUMMARY*.md
+*ANALYSIS*.md
+import-comparison-viewer.html
+*-view-screenshots.html
+load-test-*.html
+functional-test.js
+/playwright-report
+/test-results
+/screenshots
+/actual-ui
+/e2e-screenshots
+/real-screenshots
+/screenshots-advanced
+actual-ui-viewer.html
+view-screenshots.html
 
 # production
 /build

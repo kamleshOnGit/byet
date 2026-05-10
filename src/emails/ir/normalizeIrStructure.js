@@ -37,6 +37,10 @@ const columnHasMeaningfulComponents = (column) => (column?.components || []).som
 
 const liftColumnNestedRows = (column) => {
   if (!column?.nestedRows?.length) return column;
+  // Only lift when ALL nested rows are single-column; multi-column rows must stay as nestedRows
+  // so they can be expanded into proper multi-column layouts (e.g. image+text hero).
+  const allSingleColumn = column.nestedRows.every((nestedRow) => (nestedRow.columns || []).length <= 1);
+  if (!allSingleColumn) return column;
   const nestedComponents = column.nestedRows.flatMap((nestedRow) => (
     (nestedRow.columns || [])
       .flatMap((nestedColumn) => (nestedColumn.components || []).filter(isMeaningfulComponent))
@@ -67,6 +71,11 @@ const getSingleSemanticComponents = (row) => (getSingleSemanticColumn(row)?.comp
 const getRowTextLength = (row) => getSingleSemanticComponents(row).reduce((sum, component) => (
   sum + (`${component.content || ''}`.replace(/\s+/g, ' ').trim().length)
 ), 0);
+const getSingleSemanticRowText = (row) => getSingleSemanticComponents(row)
+  .map((component) => `${component.content || ''}`.replace(/\s+/g, ' ').trim())
+  .filter(Boolean)
+  .join(' ')
+  .trim();
 const isImageOnlyRow = (row) => {
   const components = getSingleSemanticComponents(row);
   return components.length === 1 && IMAGE_LIKE_TYPES.has(components[0]?.type);
@@ -77,6 +86,16 @@ const isTextOnlyRow = (row) => {
   if (!components.every((component) => TEXT_LIKE_OR_LINK.has(component.type))) return false;
   const totalLength = getRowTextLength(row);
   return totalLength > 0 && totalLength < 200;
+};
+const isStandaloneHeadingOrCtaRow = (row) => {
+  const text = getSingleSemanticRowText(row).toLowerCase();
+  if (!text) return false;
+  if (/^view\s+more\s*>>?$/.test(text)) return true;
+  if (/^more\s+categories$/.test(text)) return true;
+  if (/^order\s+now$/.test(text)) return true;
+  if (/^discover\s+our\s+amazing\s+bikes!?$/.test(text)) return true;
+  if (/^special\s+offers$/.test(text)) return true;
+  return false;
 };
 
 const createMergedRow = (imageRow, textRow) => {
@@ -119,7 +138,12 @@ const mergeImageTextRows = (rows) => {
   while (i < rows.length) {
     const current = rows[i];
     const next = rows[i + 1];
-    if (isImageOnlyRow(current) && next && isTextOnlyRow(next)) {
+    if (
+      isImageOnlyRow(current)
+      && next
+      && isTextOnlyRow(next)
+      && !isStandaloneHeadingOrCtaRow(next)
+    ) {
       merged.push(createMergedRow(current, next));
       i += 2;
       continue;
@@ -189,22 +213,29 @@ export const normalizeScannedRows = (rows, section) => {
         promotedColumns.push(column);
       }
     });
-
     const cleanedColumnsRaw = promotedColumns.map((column) => {
       const filteredNestedRows = (column.nestedRows || []).filter(isMeaningfulRow);
       const filteredComponents = (column.components || []).filter(isMeaningfulComponent);
       if (filteredComponents.length === 0) {
-        const lifted = filteredNestedRows.flatMap((nestedRow) => (
-          (nestedRow.columns || [])
-            .filter((nestedColumn) => columnHasMeaningfulComponents(nestedColumn))
-            .flatMap((nestedColumn) => (nestedColumn.components || []).filter(isMeaningfulComponent))
-        ));
-        if (lifted.length > 0) {
-          return {
-            ...column,
-            components: lifted,
-            nestedRows: [],
-          };
+        // Only lift (flatten) components from nested rows when ALL nested rows are single-column.
+        // Multi-column nested rows must stay as nestedRows so flattenResidualNestedRows can
+        // expand them into proper multi-column rows (e.g. image+text hero layout).
+        const allNestedRowsAreSingleColumn = filteredNestedRows.every(
+          (nestedRow) => (nestedRow.columns || []).length <= 1,
+        );
+        if (allNestedRowsAreSingleColumn && filteredNestedRows.length > 0) {
+          const lifted = filteredNestedRows.flatMap((nestedRow) => (
+            (nestedRow.columns || [])
+              .filter((nestedColumn) => columnHasMeaningfulComponents(nestedColumn))
+              .flatMap((nestedColumn) => (nestedColumn.components || []).filter(isMeaningfulComponent))
+          ));
+          if (lifted.length > 0) {
+            return {
+              ...column,
+              components: lifted,
+              nestedRows: [],
+            };
+          }
         }
       }
       return {
@@ -266,15 +297,24 @@ export const normalizeScannedRows = (rows, section) => {
   const grouped = groupConsecutiveSingleNavRows(merged);
   const footerCompacted = compactFooterRows(grouped);
   const final = compactSingleColumnContentRuns(footerCompacted);
-  console.log('[normalize debug final rows]', final.map((row) => ({
-    reasons: row._scan?.reasons,
-    columns: (row.columns || []).map((column) => ({
-      size: column.size,
-      types: (column.components || []).map((component) => component.type),
-      contents: (column.components || []).map((component) => component.content),
-    })),
-  })));
   return final;
+};
+
+const liftSingleColumnNestedRowsFromColumn = (column) => {
+  // For columns that have no direct components but have nestedRows where every nestedRow
+  // is single-column, lift those nested components up into the column directly.
+  if ((column.components || []).length > 0) return column;
+  const nestedRows = (column.nestedRows || []).filter(isMeaningfulRow);
+  if (nestedRows.length === 0) return column;
+  const allSingleColumn = nestedRows.every((nr) => (nr.columns || []).length <= 1);
+  if (!allSingleColumn) return column;
+  const lifted = nestedRows.flatMap((nr) => (
+    (nr.columns || [])
+      .filter(columnHasMeaningfulComponents)
+      .flatMap((nc) => (nc.components || []).filter(isMeaningfulComponent))
+  ));
+  if (lifted.length === 0) return column;
+  return { ...column, components: lifted, nestedRows: [] };
 };
 
 const flattenResidualNestedRows = (rows, section) => {
@@ -302,7 +342,10 @@ const flattenResidualNestedRows = (rows, section) => {
       });
       return;
     }
-    result.push(row);
+    // For mixed rows (some columns have components, some have only nestedRows),
+    // lift single-column nestedRows up into those columns so they render properly.
+    const liftedColumns = columns.map(liftSingleColumnNestedRowsFromColumn);
+    result.push({ ...row, columns: liftedColumns });
   });
   return result.filter(isMeaningfulRow);
 };
