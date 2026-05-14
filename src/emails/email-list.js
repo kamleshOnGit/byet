@@ -65,105 +65,6 @@ const EmailList = () => {
     }
   };
 
-  const getStructureSummary = (sections = []) => {
-    const summary = {
-      sections: sections.length,
-      rows: 0,
-      columns: 0,
-      components: 0,
-    };
-
-    sections.forEach((section) => {
-      const rows = section?.rows || [];
-      summary.rows += rows.length;
-      rows.forEach((row) => {
-        const columns = row?.columns || [];
-        summary.columns += columns.length;
-        columns.forEach((column) => {
-          summary.components += (column?.components || []).length;
-        });
-      });
-    });
-
-    return summary;
-  };
-
-  const compareStructures = (legacySections = [], irSections = []) => {
-    const legacy = getStructureSummary(legacySections);
-    const ir = getStructureSummary(irSections);
-
-    const buildRowSignatures = (sections = []) => sections.flatMap((section, sectionIndex) =>
-      (section?.rows || []).map((row, rowIndex) => {
-        const columns = row?.columns || [];
-        return {
-          key: `${sectionIndex}:${rowIndex}`,
-          columnCount: columns.length,
-          componentCounts: columns.map((column) => (column?.components || []).length),
-          componentTypes: columns.map((column) => (column?.components || []).map((component) => component?.type || 'unknown').join('|')),
-          hasBackground: !!(row?.settings?.backgroundColor || row?.settings?.backgroundImage),
-        };
-      })
-    );
-
-    const legacyRows = buildRowSignatures(legacySections);
-    const irRows = buildRowSignatures(irSections);
-    const pairedRows = Array.from({ length: Math.max(legacyRows.length, irRows.length) }, (_, index) => ({
-      legacy: legacyRows[index] || null,
-      ir: irRows[index] || null,
-    }));
-
-    const rowShapeMismatchCount = pairedRows.reduce((count, pair) => {
-      if (!pair.legacy || !pair.ir) return count + 1;
-      const sameColumnCount = pair.legacy.columnCount === pair.ir.columnCount;
-      const sameComponentCounts = JSON.stringify(pair.legacy.componentCounts) === JSON.stringify(pair.ir.componentCounts);
-      const sameComponentTypes = JSON.stringify(pair.legacy.componentTypes) === JSON.stringify(pair.ir.componentTypes);
-      return count + (sameColumnCount && sameComponentCounts && sameComponentTypes ? 0 : 1);
-    }, 0);
-
-    return {
-      legacy,
-      ir,
-      delta: {
-        sections: ir.sections - legacy.sections,
-        rows: ir.rows - legacy.rows,
-        columns: ir.columns - legacy.columns,
-        components: ir.components - legacy.components,
-      },
-      shape: {
-        legacyRows,
-        irRows,
-        rowShapeMismatchCount,
-      },
-    };
-  };
-
-  const shouldUseIrSections = (comparison, irSections = []) => {
-    if (!comparison || !Array.isArray(irSections) || irSections.length === 0) return false;
-
-    const hasRenderableComponents = irSections.some((section) =>
-      (section?.rows || []).some((row) =>
-        (row?.columns || []).some((column) => (column?.components || []).length > 0)
-      )
-    );
-
-    if (!hasRenderableComponents) return false;
-
-    const { legacy, ir, delta } = comparison;
-    const sectionsClose = Math.abs(delta.sections) <= 1;
-    const rowsClose = Math.abs(delta.rows) <= Math.max(1, Math.ceil((legacy.rows || 0) * 0.15));
-    const columnsClose = Math.abs(delta.columns) <= Math.max(2, Math.ceil((legacy.columns || 0) * 0.2));
-    const componentsClose = Math.abs(delta.components) <= Math.max(3, Math.ceil((legacy.components || 0) * 0.25));
-    const rowShapeClose = (comparison?.shape?.rowShapeMismatchCount || 0) <= Math.max(1, Math.ceil(((comparison?.shape?.legacyRows || []).length || 0) * 0.2));
-
-    return hasRenderableComponents
-      && ir.rows > 0
-      && ir.columns > 0
-      && sectionsClose
-      && rowsClose
-      && columnsClose
-      && componentsClose
-      && rowShapeClose;
-  };
 
   const hasRenderableImportedContent = (sections = []) => sections.some((section) =>
     (section?.rows || []).some((row) =>
@@ -238,11 +139,8 @@ const EmailList = () => {
         ? null
         : parsedTemplate.templateSettings;
 
-      const structureComparison = compareStructures(legacySections || [], mappedIrSections || []);
-
 
       const irLooksUsable = hasRenderableImportedContent(mappedIrSections);
-      const irStructurallyClose = shouldUseIrSections(structureComparison, mappedIrSections);
       const useIrSections = irLooksUsable;
       if (useIrSections) {
         importedSections = normalizeImportedSectionsUrls(mappedIrSections, assetBaseUrl);

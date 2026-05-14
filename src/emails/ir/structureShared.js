@@ -121,18 +121,38 @@ export const getEffectiveSettings = (node) => ({
 export const applyEffectiveSettings = (target, irNode) => {
   if (!target || !irNode) return;
   const effective = getEffectiveSettings(irNode);
-  
-  // Deep merge settings to preserve all style information
+  // For structural elements (sections, rows, columns), only use own settings for
+  // layout-critical properties that must NOT be inherited from ancestor elements:
+  // - backgroundColor: should only come from the element's own style, not from a
+  //   parent <a> button (which sets background-color:#29c978 on the link itself)
+  // - display: should not cascade from layout tables (display:table) or buttons to
+  //   the editor's flex-based column layout
+  // - width/height/minHeight/maxWidth/minWidth: should not cascade from ecw container
+  //   (e.g. min-height:600px on ecw makes every column 600px tall in the editor)
+  // - borderRadius: ecw's border-radius should not apply to every child column
+  const own = irNode?.styleMap?.own || irNode?.ownSettings || {};
+  const STRUCTURAL_OWN_ONLY_KEYS = [
+    'backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundPosition', 'backgroundRepeat',
+    'display', 'width', 'height', 'minHeight', 'maxHeight', 'minWidth', 'maxWidth',
+    'borderRadius', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft',
+    'borderWidth', 'borderColor', 'overflow', 'float', 'position',
+    'top', 'right', 'bottom', 'left', 'zIndex',
+  ];
+  // Start from effective (for cascaded text/font settings), then override structural
+  // properties with own-only values (omitting keys not explicitly set on this element).
+  const filteredEffective = { ...effective };
+  STRUCTURAL_OWN_ONLY_KEYS.forEach((key) => {
+    if (own[key] !== undefined) {
+      filteredEffective[key] = own[key];
+    } else {
+      delete filteredEffective[key];
+    }
+  });
   target.settings = {
     ...(target.settings || {}),
-    ...effective,
-    padding: mergeBox(target.settings?.padding || {}, effective.padding || {}),
-    margin: mergeBox(target.settings?.margin || {}, effective.margin || {}),
-    // Preserve individual border properties if border shorthand exists
-    ...(effective.border && !target.settings?.borderTop ? { borderTop: effective.border } : {}),
-    ...(effective.border && !target.settings?.borderRight ? { borderRight: effective.border } : {}),
-    ...(effective.border && !target.settings?.borderBottom ? { borderBottom: effective.border } : {}),
-    ...(effective.border && !target.settings?.borderLeft ? { borderLeft: effective.border } : {}),
+    ...filteredEffective,
+    padding: mergeBox(target.settings?.padding || {}, (own.padding ? own.padding : effective.padding) || {}),
+    margin: mergeBox(target.settings?.margin || {}, (own.margin ? own.margin : effective.margin) || {}),
   };
 };
 
@@ -303,6 +323,16 @@ export const createComponentFromIr = (node) => {
     if (btnTextColor) comp.settings.buttonTextColor = btnTextColor;
     const btnRadius = node.props?.buttonRadius || ownSettings.borderRadius;
     if (btnRadius) comp.settings.borderRadius = btnRadius;
+    // Clear layout properties that should not cascade from email HTML source to the
+    // button editor component — display:table and width:100% come from the <a>/<span>
+    // element in the original email and would make the button a full-width green block.
+    delete comp.settings.display;
+    delete comp.settings.width;
+    delete comp.settings.height;
+    delete comp.settings.minHeight;
+    delete comp.settings.maxWidth;
+    delete comp.settings.minWidth;
+    delete comp.settings.backgroundColor; // Button bg is stored in buttonColor, not backgroundColor
     return comp;
   }
 

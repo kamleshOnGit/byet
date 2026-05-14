@@ -524,12 +524,6 @@ const nodeFromDom = (node, ctx) => {
 // Strip MSO/VML conditional comments before parsing to prevent ghost TDs.
 // <!--[if mso]>...<![endif]--> blocks can contain <td> tags that the HTML5 parser
 // partially leaks into the DOM, creating spurious extra columns in the editor.
-// Strip MSO/VML conditional comments before parsing to prevent ghost TDs.
-// <!--[if mso]>...<![endif]--> blocks can contain <td> tags that the HTML5 parser
-// partially leaks into the DOM, creating spurious extra columns in the editor.
-// Strip MSO/VML conditional comments before parsing to prevent ghost TDs.
-// <!--[if mso]>...<![endif]--> blocks can contain <td> tags that the HTML5 parser
-// partially leaks into the DOM, creating spurious extra columns in the editor.
 const stripMsoConditionals = (html) => {
   if (!html) return html;
   let result = String(html);
