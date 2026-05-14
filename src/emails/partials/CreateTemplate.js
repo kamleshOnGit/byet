@@ -670,12 +670,12 @@ const CreateTemplate = () => {
               />
             </Box>
           ) : isBrowserView ? (
-            <Box flex="5" p={4} bg="gray.200" borderLeftWidth="1px" overflow="hidden">
+            <Box flex="5" p={4} bg="gray.200" borderLeftWidth="1px" overflow="auto">
               <Heading size="lg" mb={4}>
                 Browser View
               </Heading>
               <Box
-                style={{ padding: '16px', background: 'white', border: '1px solid #ddd', borderRadius: '8px', overflow: 'hidden', height: 'calc(100% - 60px)' }}
+                style={{ padding: '16px', background: 'white', border: '1px solid #ddd', borderRadius: '8px', overflow: 'auto', height: 'calc(100% - 60px)' }}
               >
                 <iframe
                   title="email-preview"

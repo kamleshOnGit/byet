@@ -133,6 +133,7 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, syncEditorToHtml, o
     <Box
       ref={drop}
       onClick={handleSelectColumn}
+      _hover={{ outline: isSelected ? '2px solid #3182ce' : '1px dashed #cbd5e0' }}
       style={{
         ...columnParentStyle(colSpan),
         ...colSettingsStyle,

@@ -153,6 +153,7 @@ const DroppableRow = ({ row, parentId, index, moveRow, syncEditorToHtml, onSelec
     <Box
       ref={(node) => drag(drop(node))}
       onClick={handleSelectRow}
+      _hover={{ outline: isSelected ? '2px solid #3182ce' : '1px dashed #a0aec0' }}
       style={{
         ...rowStyle,
         ...rowSettingsStyle,
