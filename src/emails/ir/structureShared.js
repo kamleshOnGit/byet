@@ -296,12 +296,13 @@ export const createComponentFromIr = (node) => {
   if (componentType === COMPONENT_TYPES.BUTTON) {
     comp.linkUrl = node.props?.linkUrl || '';
     comp.content = node.props?.text || '';
-    if (ownSettings.backgroundColor || effectiveSettings.backgroundColor) {
-      comp.settings.buttonColor = ownSettings.backgroundColor || effectiveSettings.backgroundColor;
-    }
-    if (ownSettings.textColor || effectiveSettings.textColor) {
-      comp.settings.buttonTextColor = ownSettings.textColor || effectiveSettings.textColor;
-    }
+    // Prefer explicit buttonColor prop (from span-as-button extraction), then ownSettings, then effective
+    const btnColor = node.props?.buttonColor || ownSettings.backgroundColor || effectiveSettings.backgroundColor;
+    if (btnColor) comp.settings.buttonColor = btnColor;
+    const btnTextColor = node.props?.buttonTextColor || ownSettings.textColor || effectiveSettings.textColor;
+    if (btnTextColor) comp.settings.buttonTextColor = btnTextColor;
+    const btnRadius = node.props?.buttonRadius || ownSettings.borderRadius;
+    if (btnRadius) comp.settings.borderRadius = btnRadius;
     return comp;
   }
 

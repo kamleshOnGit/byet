@@ -148,6 +148,17 @@ const getContentSignature = (el) => {
       if (styleValue(style, 'background-color') || styleValue(style, 'padding')) {
         signature.hasButtonLike = true;
       }
+      // Detect 'bulletproof button': <a> with a child span having display:table + bg + border-radius
+      if (!signature.hasButtonLike) {
+        const spanKids = Array.from(node.children || []).filter(c => c.tagName && c.tagName.toLowerCase() === 'span');
+        for (const sp of spanKids) {
+          const spStyle = (sp.getAttribute && sp.getAttribute('style')) || '';
+          if (/display\s*:\s*table\b/i.test(spStyle) && /background-color\s*:/i.test(spStyle) && /border-radius\s*:/i.test(spStyle)) {
+            signature.hasButtonLike = true;
+            break;
+          }
+        }
+      }
     }
     if (tag === 'button') signature.hasButtonLike = true;
     if (['span', 'strong', 'b', 'em', 'i', 'u', 'font'].includes(tag)) signature.hasInlineWrapper = true;
@@ -454,13 +465,43 @@ const nodeFromDom = (node, ctx) => {
         children: directImageChildren,
       };
     }
+    // Extract button styling from span-as-button (child span: display:table + background-color + border-radius)
+    let spanButtonBg = '';
+    let spanButtonTextColor = '';
+    let spanButtonRadius = 0;
+    for (const sp of Array.from(el.children || [])) {
+      if (`${sp.tagName || ''}`.toLowerCase() !== 'span') continue;
+      const spStyle = sp.getAttribute ? (sp.getAttribute('style') || '') : '';
+      if (/display\s*:\s*table\b/i.test(spStyle) && /background-color\s*:/i.test(spStyle)) {
+        spanButtonBg = styleValue(spStyle, 'background-color');
+        const brRaw = styleValue(spStyle, 'border-radius');
+        spanButtonRadius = brRaw ? (parseFloat(brRaw) || 0) : 0;
+        const innerSpans = Array.from(sp.querySelectorAll ? sp.querySelectorAll('span') : []);
+        for (const inner of innerSpans) {
+          const tc = styleValue(inner.getAttribute ? (inner.getAttribute('style') || '') : '', 'color');
+          if (tc) { spanButtonTextColor = tc; break; }
+        }
+        if (!spanButtonTextColor) {
+          spanButtonTextColor = styleValue(el.getAttribute ? (el.getAttribute('style') || '') : '', 'color');
+        }
+        break;
+      }
+    }
+    const mergedOwnSettings = spanButtonBg
+      ? { ...ownSettings, backgroundColor: spanButtonBg, ...(spanButtonTextColor ? { textColor: spanButtonTextColor } : {}), ...(spanButtonRadius ? { borderRadius: spanButtonRadius } : {}) }
+      : ownSettings;
     return {
       ...base,
+      ownSettings: mergedOwnSettings,
+      styleMap: { ...base.styleMap, own: mergedOwnSettings },
       kind: IR_NODE_KIND.COMPONENT,
       type: COMPONENT_TYPES.LINK,
       props: {
-        linkUrl: normalizeImportedUrl(attrs.href || '', ctx?.assetBaseUrl),
+        linkUrl: normalizeImportedUrl(attrs.href || '', (ctx && ctx.assetBaseUrl) || ''),
         text,
+        ...(spanButtonBg ? { buttonColor: spanButtonBg } : {}),
+        ...(spanButtonTextColor ? { buttonTextColor: spanButtonTextColor } : {}),
+        ...(spanButtonRadius ? { buttonRadius: spanButtonRadius } : {}),
       },
       children: [],
     };
@@ -480,10 +521,33 @@ const nodeFromDom = (node, ctx) => {
   return base;
 };
 
+// Strip MSO/VML conditional comments before parsing to prevent ghost TDs.
+// <!--[if mso]>...<![endif]--> blocks can contain <td> tags that the HTML5 parser
+// partially leaks into the DOM, creating spurious extra columns in the editor.
+// Strip MSO/VML conditional comments before parsing to prevent ghost TDs.
+// <!--[if mso]>...<![endif]--> blocks can contain <td> tags that the HTML5 parser
+// partially leaks into the DOM, creating spurious extra columns in the editor.
+// Strip MSO/VML conditional comments before parsing to prevent ghost TDs.
+// <!--[if mso]>...<![endif]--> blocks can contain <td> tags that the HTML5 parser
+// partially leaks into the DOM, creating spurious extra columns in the editor.
+const stripMsoConditionals = (html) => {
+  if (!html) return html;
+  let result = String(html);
+  // Remove MSO downlevel-hidden conditional comments: <!--[if mso]>...<![endif]-->
+  result = result.replace(/<!--\[if[\s\S]*?\[endif\]-->/gi, '');
+  // Remove downlevel-revealed conditional comments: <![if !...]>...<![endif]>
+  result = result.replace(/<!\[if[\s\S]*?\[endif\]>/gi, '');
+  // Remove VML v: elements (v:roundrect, v:stroke, etc.)
+  result = result.replace(/<v:[a-z][a-z0-9]*[\s\S]*?<\/v:[a-z][a-z0-9]*>/gi, '');
+  result = result.replace(/<v:[a-z][a-z0-9]*[^>]*\/>/gi, '');
+  return result;
+};
+
 export const htmlToIr = (htmlText, options = {}) => {
   const doc = DEFAULT_IR_DOCUMENT();
   const parser = new DOMParser();
-  const dom = parser.parseFromString(htmlText || '', 'text/html');
+  const cleanedHtml = stripMsoConditionals(htmlText || '');
+  const dom = parser.parseFromString(cleanedHtml, 'text/html');
   const body = dom.body;
 
   const rootCtx = { depth: 0, assetBaseUrl: options.assetBaseUrl || '' };

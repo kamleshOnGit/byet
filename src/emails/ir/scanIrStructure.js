@@ -14,6 +14,8 @@ import {
   isMeaningfulText,
   shouldFlattenWrapper,
 } from './structureShared';
+import { COMPONENT_TYPES } from '../partials/componentTypes';
+import { createComponentInstance } from '../partials/componentRegistry';
 
 const createStructureSection = (sourceNode = null) => {
   const section = { id: createId(), rows: [], settings: {} };
@@ -84,6 +86,22 @@ const selectDominantTableNode = (irDoc) => {
 
 const collectMeaningfulChildren = (node, predicate) => (node?.children || []).filter((child) => predicate(`${child?.tag || ''}`.toLowerCase(), child));
 
+// Detect spacer/gutter TD nodes: zero-content TDs used only for spacing (e.g. class l0-s0, font-size:0)
+const isGutterTdNode = (node) => {
+  if (`${node?.tag || ''}`.toLowerCase() !== 'td') return false;
+  const sig = node?.contentSignature || {};
+  if (sig.hasImage || sig.hasLink || sig.hasNestedTable) return false;
+  // Gutter TDs typically have shouldSkip hint or only nbsp/whitespace content
+  if (node?.layoutHints?.shouldSkip) return true;
+  // Check for font-size:0 style (classic gutter pattern)
+  const styleRaw = `${node?.attrs?.style || ''}`;
+  if (/font-size\s*:\s*0/i.test(styleRaw)) return true;
+  // Class pattern: l{n}-s{n} (spacer columns in multi-column layouts)
+  const cls = `${node?.attrs?.class || ''}`;
+  if (/\bl\d+-s\d+\b/i.test(cls)) return true;
+  return false;
+};
+
 const appendComponentToColumn = (column, component) => {
   if (!column || !component) return;
   column.components.push(component);
@@ -116,6 +134,53 @@ const isStructurallyMeaningfulRow = (row) => {
   if (columns.some((col) => (col.components || []).length > 0)) return true;
   if (columns.some((col) => (col.nestedRows || []).length > 0)) return true;
   return false;
+};
+
+// Detects multiple sibling float:left tables that each contain a single link — classic nav pattern
+const detectFloatNavTables = (childNodes) => {
+  const tableSiblings = childNodes.filter((n) => `${n?.tag || ''}`.toLowerCase() === 'table');
+  if (tableSiblings.length < 2) return null;
+  // At least majority of sibling tables must have float:left style
+  const floatTables = tableSiblings.filter((t) => {
+    const floatVal = `${t?.ownSettings?.float || t?.settings?.float || ''}`.toLowerCase();
+    return floatVal === 'left' || floatVal === 'right';
+  });
+  if (floatTables.length < 2) return null;
+  // Check that all non-float tables are also in the same position (i.e. it's a mixed nav)
+  // Extract link text from each float table
+  const navItems = [];
+  for (const t of floatTables) {
+    const allLinks = [];
+    const findLinks = (node) => {
+      if (!node) return;
+      if (node.kind === IR_NODE_KIND.COMPONENT && node.type === COMPONENT_TYPES.LINK) {
+        allLinks.push(node.props?.text || '');
+        return;
+      }
+      (node.children || []).forEach(findLinks);
+    };
+    findLinks(t);
+    if (allLinks.length > 0) navItems.push(allLinks[0]);
+    // If a float table has no link (e.g. logo with img), skip it for the menu items list
+  }
+  return navItems.length >= 2 ? navItems : null;
+};
+
+// Inline-only tags: no block-level structure, safe to keep as raw HTML for inline flow
+const INLINE_ONLY_TAGS = new Set(['span', 'a', 'strong', 'b', 'em', 'i', 'u', 's', 'del', 'ins', 'sub', 'sup', 'font', 'br', '#text']);
+
+const isInlineOnlyContent = (node) => {
+  if (!node) return false;
+  const tag = `${node.tag || ''}`.toLowerCase();
+  const sig = node.contentSignature || {};
+  // Must be a div or p with text content (not empty)
+  if (!['div', 'p', 'center'].includes(tag)) return false;
+  if (!sig.hasText && !sig.hasLink) return false; // empty or image-only
+  // No nested tables and no block-level wrappers inside
+  if (sig.hasNestedTable || sig.hasBlockWrapper) return false;
+  // All descendant tags must be inline (ignore the node's own tag)
+  const descendantTags = (sig.tags || []).filter((t) => t !== tag);
+  return descendantTags.every((t) => INLINE_ONLY_TAGS.has(t));
 };
 
 const shouldConvertNodeToRawHtml = (node) => {
@@ -158,6 +223,14 @@ const appendNodeContentToColumn = (node, column) => {
   if (node.kind === IR_NODE_KIND.ELEMENT) {
     const tag = `${node.tag || ''}`.toLowerCase();
     const sig = node.contentSignature || {};
+
+    // Inline-only div/p: spans, text, br — preserve as raw HTML to keep inline flow.
+    // Splitting these into individual SPAN components breaks the layout in preview.
+    if (isInlineOnlyContent(node) && node.outerHTML) {
+      appendComponentToColumn(column, createRawHtmlComponent(node));
+      addScanReasons(column, ['inline_only_raw_html'], 0.85);
+      return;
+    }
     
     // For complex divs with mixed content, try to parse children first
     if (tag === 'div' && sig.hasNestedTable && (sig.hasText || sig.hasImage)) {
@@ -246,11 +319,27 @@ const mergeNestedRowsIntoColumn = (targetColumn, nestedRows = [], reason = 'flat
 
 const buildColumnsFromRowNode = (rowNode) => {
   const tdNodes = collectMeaningfulChildren(rowNode, (tag) => tag === 'td');
-  const columnNodes = tdNodes.length > 0 ? tdNodes : [rowNode];
+  // Filter out pure gutter/spacer TDs so siblingCount reflects actual content columns
+  const contentTdNodes = tdNodes.filter((n) => !isGutterTdNode(n));
+  const columnNodes = contentTdNodes.length > 0 ? contentTdNodes : (tdNodes.length > 0 ? tdNodes : [rowNode]);
   const siblingCount = columnNodes.length;
   return columnNodes.map((columnNode) => {
     const column = createStructureColumn(columnNode, inferColumnSize(columnNode, siblingCount));
     addScanReasons(column, [tdNodes.length > 0 ? 'direct_td_column' : 'synthetic_single_column'], tdNodes.length > 0 ? 0.9 : 0.7);
+ 
+    // Detect float:left nav tables before processing children individually
+    const navItems = detectFloatNavTables(columnNode.children || []);
+    if (navItems) {
+      const navComp = createComponentInstance(COMPONENT_TYPES.MENU);
+      navComp.id = createId();
+      navComp.type = COMPONENT_TYPES.MENU;
+      navComp.content = navItems.join('\n');
+      navComp.menuItems = navItems.join('\n');
+      applyEffectiveSettings({ settings: navComp.settings }, columnNode);
+      appendComponentToColumn(column, navComp);
+      addScanReasons(column, ['float_nav_tables_merged'], 0.88);
+      return column;
+    }
 
     (columnNode.children || []).forEach((child) => {
       const tag = `${child.tag || ''}`.toLowerCase();
