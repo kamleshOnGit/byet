@@ -5,7 +5,6 @@ import { AddIcon, EditIcon } from '@chakra-ui/icons';
 import { parseHtmlToSections } from './utils/htmlParser';
 import { htmlToIr } from './import/htmlToIr';
 import { irToSections, scanIrToStructureMap } from './ir/irToSections';
-import { COMPONENT_TYPES } from './partials/componentTypes';
 
 // ---------------------------------------------------------------------------
 // Asset inlining — converts local relative image src values to data: URIs so
@@ -189,69 +188,6 @@ const isDivBasedTemplate = (htmlText = '') => {
   return tableMatches === 0 || (divMatches > 0 && tableMatches < 2 && divMatches > tableMatches * 3);
 };
 
-const shouldUseVisualStripoImport = (htmlText = '') => {
-  const lower = `${htmlText}`.toLowerCase();
-  if (!/\bes-(wrapper|content|header|footer|content-body|header-body|footer-body)\b/.test(lower)) return false;
-  const sectionBodyCount = (lower.match(/\bes-(content|header|footer)-body\b/g) || []).length;
-  const backgroundImageCount = (lower.match(/background-image\s*:|<[^>]+\sbackground=/g) || []).length;
-  const tableCount = (lower.match(/<table\b/g) || []).length;
-
-  // These Stripo designs rely on a preserved table/background composition.
-  // Decomposing them into editable components fragments the visual layout in edit mode.
-  return backgroundImageCount > 0 || sectionBodyCount >= 8 || tableCount >= 90;
-};
-
-const buildVisualHtmlImport = (htmlText = '') => {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(htmlText || '', 'text/html');
-  const styleHtml = Array.from(doc.head?.querySelectorAll?.('style') || [])
-    .map((node) => node.outerHTML)
-    .join('\n');
-  const wrapper = doc.body?.querySelector?.('table.es-wrapper') || doc.body?.firstElementChild;
-  const visualHtml = [styleHtml, wrapper?.outerHTML || htmlText].filter(Boolean).join('\n');
-  const now = Date.now();
-
-  return [{
-    id: now,
-    settings: {
-      backgroundColor: 'transparent',
-      padding: { top: 0, right: 0, bottom: 0, left: 0 },
-      margin: { top: 0, right: 0, bottom: 0, left: 0 },
-    },
-    rows: [{
-      id: now + 1,
-      settings: {
-        backgroundColor: 'transparent',
-        padding: { top: 0, right: 0, bottom: 0, left: 0 },
-        margin: { top: 0, right: 0, bottom: 0, left: 0 },
-      },
-      columns: [{
-        id: now + 2,
-        size: 12,
-        settings: {
-          backgroundColor: 'transparent',
-          padding: { top: 0, right: 0, bottom: 0, left: 0 },
-          margin: { top: 0, right: 0, bottom: 0, left: 0 },
-        },
-        components: [{
-          id: now + 3,
-          type: COMPONENT_TYPES.HTML,
-          content: '',
-          htmlContent: visualHtml,
-          readOnly: true,
-          visualImport: true,
-          settings: {
-            backgroundColor: 'transparent',
-            padding: { top: 0, right: 0, bottom: 0, left: 0 },
-            margin: { top: 0, right: 0, bottom: 0, left: 0 },
-            width: '100%',
-          },
-        }],
-      }],
-    }],
-  }];
-};
-
 const EmailList = () => {
   const navigate = useNavigate();
   const fileRef = useRef(null);
@@ -297,8 +233,6 @@ const EmailList = () => {
       // Fall back: try to resolve a base URL from saved-from comment
       const assetBaseUrl = getSavedFromBaseUrl(text);
 
-      const visualStripoImport = shouldUseVisualStripoImport(text);
-
       // Fix 8: choose parsing strategy based on template structure
       const divBased = isDivBasedTemplate(text);
 
@@ -343,10 +277,7 @@ const EmailList = () => {
 
       let importedSections;
       let chosenParser;
-      if (visualStripoImport) {
-        importedSections = normalizeImportedSectionsUrls(buildVisualHtmlImport(text), assetBaseUrl);
-        chosenParser = 'visual-stripo-html';
-      } else if (irQuality.score >= legacyQuality.score && irQuality.count > 0) {
+      if (irQuality.score >= legacyQuality.score && irQuality.count > 0) {
         importedSections = normalizeImportedSectionsUrls(mappedIrSections, assetBaseUrl);
         chosenParser = 'ir';
       } else if (legacyQuality.count > 0) {
