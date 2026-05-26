@@ -138,9 +138,13 @@ const extractColorDeep = (el, propName = 'background-color', checkNested = true)
   const directColor = extractColor(el, propName);
   if (directColor) return directColor;
   
-  // Check nested elements (td, tr, div, span, table) for background-color
+  // Check nested STRUCTURAL elements for background-color.
+  // Intentionally excludes 'span' — inline/decorative spans (button pills,
+  // highlighted text, Outlook VML wrappers) often carry a button's brand colour
+  // (e.g. #29c978) that must NOT be promoted to a section/row/container
+  // background.  Only block-level structural tags are reliable signals.
   if (checkNested && propName === 'background-color') {
-    const tags = ['td', 'tr', 'div', 'span', 'table', 'section', 'article'];
+    const tags = ['td', 'tr', 'div', 'table', 'section', 'article'];
     for (const tag of tags) {
       const nested = el.querySelector?.(tag);
       if (nested) {
@@ -1184,52 +1188,21 @@ const findMultiColTableRows = (td) => {
   return results;
 };
 
-// Get bg color for a row: check tr, first td, deeply nested elements, then walk up
+// Get bg color for a row: check tr own style, first td own style, then walk up.
+// Deliberately avoids deep querySelectorAll scans — those propagate button/pill colours
+// (e.g. a green CTA span) up to the row level, corrupting section backgrounds.
 const getRowBg = (tr, tds) => {
-  // Check the tr itself first
-  let bg = extractColorDeep(tr, 'background-color', true);
+  // 1. TR own background (style attribute + bgcolor attribute only)
+  let bg = extractColor(tr, 'background-color');
   if (bg && bg !== 'transparent' && bg !== 'rgba(0,0,0,0)') return bg;
-  
+
   if (tds.length > 0) {
-    // Check the first td
-    bg = extractColorDeep(tds[0], 'background-color', true);
+    // 2. First TD own background (style attribute + bgcolor attribute only)
+    bg = extractColor(tds[0], 'background-color');
     if (bg && bg !== 'transparent' && bg !== 'rgba(0,0,0,0)') return bg;
-    
-    // Check for bgcolor attribute directly on td
-    const tdBgAttr = tds[0].getAttribute('bgcolor');
-    if (tdBgAttr) return tdBgAttr;
-    
-    // Check ALL nested tables at every level for bgcolor (not just immediate children)
-    // This handles cases where the color is 2+ levels deep
-    const allNestedTables = Array.from(tds[0].querySelectorAll?.('table') || []);
-    for (const table of allNestedTables) {
-      // Check table's own bgcolor first
-      const tableBg = table.getAttribute('bgcolor');
-      const tableBgStyle = extractColor(table, 'background-color');
-      if (tableBg) return tableBg;
-      if (tableBgStyle && tableBgStyle !== 'transparent' && tableBgStyle !== 'rgba(0,0,0,0)') return tableBgStyle;
-      
-      // Check table's cells
-      const tableTds = Array.from(table.querySelectorAll?.('td') || []);
-      for (const td of tableTds) {
-        const tdBg = td.getAttribute('bgcolor');
-        const tdBgStyle = extractColor(td, 'background-color');
-        if (tdBg) return tdBg;
-        if (tdBgStyle && tdBgStyle !== 'transparent' && tdBgStyle !== 'rgba(0,0,0,0)') return tdBgStyle;
-      }
-    }
-    
-    // Check nested td elements at all levels
-    const nestedTds = Array.from(tds[0].querySelectorAll?.('td') || []);
-    for (const ntd of nestedTds) {
-      bg = extractColor(ntd, 'background-color');
-      const nestedBgAttr = ntd.getAttribute('bgcolor');
-      if (bg && bg !== 'transparent' && bg !== 'rgba(0,0,0,0)') return bg;
-      if (nestedBgAttr) return nestedBgAttr;
-    }
   }
-  
-  // Last resort: walk up DOM
+
+  // 3. Last resort: walk up DOM (picks up wrapper/body background)
   bg = findClosestColor(tr, 'background-color');
   return bg || '';
 };

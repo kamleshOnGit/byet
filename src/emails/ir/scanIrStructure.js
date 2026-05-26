@@ -480,14 +480,36 @@ const buildColumnsFromRowNode = (rowNode) => {
   let columnNodes = contentTdNodes.length > 0 ? contentTdNodes : (tdNodes.length > 0 ? tdNodes : [rowNode]);
 
   // ---------------------------------------------------------------------------
-  // Float-based multi-column detection (Stripo / Esputnik pattern).
-  // When a single TD wraps ≥2 sibling tables with float:left / float:right the
-  // float tables ARE the parallel columns — not a single wide cell.
-  // detectFloatNavTables already guards the nav-link case; here we handle the
-  // generic content-column case (images, text, products, etc.).
+  // Float-table column handling — handled BEFORE the column map loop so that
+  // the two sub-cases are checked in priority order and can return early:
+  //
+  //   1. Nav-style float tables (text links only, no images) → MENU component.
+  //      detectFloatNavTables now guards against image-containing tables so
+  //      this only fires for real navigation clusters.
+  //
+  //   2. Content-style float tables (images, products, text) → parallel
+  //      columns (Stripo / Esputnik "es-left / es-right" pattern).
+  //      Only triggered when the row has a single outer TD AND nav detection
+  //      returned null, so we don't accidentally expand multi-column rows.
   // ---------------------------------------------------------------------------
   if (columnNodes.length === 1) {
     const singleTd = columnNodes[0];
+    // Priority 1: nav float tables
+    const navItems = detectFloatNavTables(singleTd.children || []);
+    if (navItems) {
+      const col = createStructureColumn(singleTd, 12);
+      addScanReasons(col, ['direct_td_column'], 0.9);
+      const navComp = createComponentInstance(COMPONENT_TYPES.MENU);
+      navComp.id = createId();
+      navComp.type = COMPONENT_TYPES.MENU;
+      navComp.content = navItems.join('\n');
+      navComp.menuItems = navItems.join('\n');
+      applyEffectiveSettings({ settings: navComp.settings }, singleTd);
+      appendComponentToColumn(col, navComp);
+      addScanReasons(col, ['float_nav_tables_merged'], 0.88);
+      return [col].filter(isColumnMeaningful);
+    }
+    // Priority 2: content float tables → each becomes a parallel column
     const floatTableSiblings = (singleTd.children || []).filter((child) => {
       if (`${child?.tag || ''}`.toLowerCase() !== 'table') return false;
       const floatVal = `${child?.ownSettings?.float || child?.settings?.float || ''}`.toLowerCase();
@@ -506,20 +528,6 @@ const buildColumnsFromRowNode = (rowNode) => {
   return columnNodes.map((columnNode) => {
     const column = createStructureColumn(columnNode, inferColumnSize(columnNode, siblingCount));
     addScanReasons(column, [tdNodes.length > 0 ? 'direct_td_column' : 'synthetic_single_column'], tdNodes.length > 0 ? 0.9 : 0.7);
- 
-    // Detect float:left nav tables before processing children individually
-    const navItems = detectFloatNavTables(columnNode.children || []);
-    if (navItems) {
-      const navComp = createComponentInstance(COMPONENT_TYPES.MENU);
-      navComp.id = createId();
-      navComp.type = COMPONENT_TYPES.MENU;
-      navComp.content = navItems.join('\n');
-      navComp.menuItems = navItems.join('\n');
-      applyEffectiveSettings({ settings: navComp.settings }, columnNode);
-      appendComponentToColumn(column, navComp);
-      addScanReasons(column, ['float_nav_tables_merged'], 0.88);
-      return column;
-    }
 
     (columnNode.children || []).forEach((child) => {
       const tag = `${child.tag || ''}`.toLowerCase();
@@ -698,6 +706,49 @@ export const scanIrToStructureMap = (irDoc, options = {}) => {
   if (!options.allowDivWalk) {
     dominantTable = selectDominantTableNode(irDoc);
     if (dominantTable) {
+      // ---------------------------------------------------------------------------
+      // Multi-section detection: templates like Stripo wrap each logical section
+      // (header, content, footer) in its own container table at the same IR depth.
+      // Example structure:
+      //   outer-wrapper-table
+      //     tbody > tr > td (wrapper cell)
+      //       table.es-content    → tbody > tr > td → table.es-header-body   (depth N)
+      //       table.es-content    → tbody > tr > td → table.es-content-body  (depth N) ← dominant
+      //       table.es-footer     → tbody > tr > td → table.es-footer-body   (depth N)
+      //
+      // When ≥2 meaningful tables share the dominant table's IR depth AND at least
+      // two produce non-empty sections, import ALL of them as separate sections so
+      // the editor shows the complete template (not just the highest-scoring one).
+      // ---------------------------------------------------------------------------
+      const targetDepth = dominantTable?.relation?.depth || 0;
+      if (targetDepth >= 3) {
+        const allTableNodes = collectTableNodes(irDoc?.nodes || []);
+        const peerTables = allTableNodes.filter(
+          (t) => isMeaningfulTableNode(t) && (t?.relation?.depth || 0) === targetDepth,
+        );
+        if (peerTables.length >= 2) {
+          const peerSections = [];
+          for (const peerTable of peerTables) {
+            const sec = createStructureSection(peerTable);
+            addScanReasons(sec, ['multi_section_peer'], 0.9);
+            const rawRows = buildRowsFromTableNode(peerTable);
+            sec.rows = normalizeScannedRows(rawRows, sec);
+            if (sec.rows.length > 0) peerSections.push(sec);
+          }
+          if (peerSections.length >= 2) {
+            return {
+              sections: peerSections,
+              diagnostics: {
+                mode: 'multi_section',
+                dominantTableId: dominantTable.id,
+                dominantTableTag: dominantTable.tag,
+                sectionCount: peerSections.length,
+              },
+            };
+          }
+        }
+      }
+
       const section = createStructureSection(dominantTable);
       addScanReasons(section, ['dominant_table_root'], 0.95);
       const rawRows = buildRowsFromTableNode(dominantTable);
