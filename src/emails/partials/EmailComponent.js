@@ -670,7 +670,18 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
         );
       case COMPONENT_TYPES.HTML:
         return (
-          <Box onClick={handleSelect} p={4} border="1px dashed" borderColor="orange.300" borderRadius="md" style={componentStyles}>
+          <Box
+            onClick={handleSelect}
+            p={component.visualImport ? 0 : 4}
+            border={component.visualImport ? 'none' : '1px dashed'}
+            borderColor={component.visualImport ? undefined : 'orange.300'}
+            borderRadius={component.visualImport ? 0 : 'md'}
+            style={{
+              ...componentStyles,
+              width: component.visualImport ? '100%' : componentStyles.width,
+              overflow: component.visualImport ? 'visible' : componentStyles.overflow,
+            }}
+          >
             <Box dangerouslySetInnerHTML={{ __html: component.htmlContent || '<div>Custom HTML content</div>' }} />
             {isSelected && !component.readOnly && (
               <textarea
