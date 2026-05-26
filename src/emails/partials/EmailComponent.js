@@ -95,6 +95,16 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
   };
 
   const isSelected = selectedTarget?.kind === 'component' && selectedTarget?.id === component.id;
+  const importedTableWrapperStyle = component.importedDomTree && type === COMPONENT_TYPES.TABLE
+    ? {
+        width: component.settings?.width || undefined,
+        maxWidth: component.settings?.maxWidth || undefined,
+        display: component.settings?.display || (component.settings?.float ? 'block' : undefined),
+        float: component.settings?.float || undefined,
+        marginLeft: component.settings?.marginLeft || undefined,
+        marginRight: component.settings?.marginRight || undefined,
+      }
+    : {};
 
   const handleRemove = (e) => {
     if (e?.stopPropagation) {
@@ -888,7 +898,10 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
       mb={0}
       borderRadius="md"
       position="relative"
-      style={{ outline: isSelected ? '2px solid #3182ce' : 'none' }}
+      style={{
+        ...importedTableWrapperStyle,
+        outline: isSelected ? '2px solid #3182ce' : 'none',
+      }}
     >
       {isSelected && (
         <IconButton
