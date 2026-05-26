@@ -118,6 +118,25 @@ export const getEffectiveSettings = (node) => ({
   margin: mergeBox(node?.styleMap?.effective?.margin || node?.settings?.margin, {}),
 });
 
+// ---------------------------------------------------------------------------
+// Fix 5: Determines whether an IR node (or any ancestor represented in its
+// styleMap.inherited) originated from a button-like <a> element.
+// A button <a> has: background-color + padding (and optionally border-radius).
+// When such an ancestor exists in the cascade chain, its textColor (white text
+// on a coloured button) must NOT flow down into child column/component settings.
+// ---------------------------------------------------------------------------
+const isButtonAncestorInCascade = (irNode) => {
+  const path = irNode?.relation?.path || [];
+  // If any element in the ancestry path is an <a> with button-like styling
+  // we detect it via the inherited styleMap.
+  const inherited = irNode?.styleMap?.inherited || {};
+  const hasButtonBg = !!(inherited.backgroundColor && inherited.backgroundColor !== 'transparent');
+  const hasButtonPad = !!(inherited.padding && (
+    (inherited.padding.top > 0) || (inherited.padding.left > 0)
+  ));
+  return hasButtonBg && hasButtonPad && path.includes('a');
+};
+
 export const applyEffectiveSettings = (target, irNode) => {
   if (!target || !irNode) return;
   const effective = getEffectiveSettings(irNode);
@@ -138,6 +157,15 @@ export const applyEffectiveSettings = (target, irNode) => {
     'borderWidth', 'borderColor', 'overflow', 'float', 'position',
     'top', 'right', 'bottom', 'left', 'zIndex',
   ];
+
+  // Fix 5: Also block textColor / fontSize cascade when the value comes from a
+  // button-like <a> ancestor.  Button text is typically white (#ffffff) — letting
+  // this cascade to all child text nodes makes them invisible on a white background.
+  const buttonAncestor = isButtonAncestorInCascade(irNode);
+  if (buttonAncestor) {
+    STRUCTURAL_OWN_ONLY_KEYS.push('textColor', 'fontSize', 'fontWeight');
+  }
+
   // Start from effective (for cascaded text/font settings), then override structural
   // properties with own-only values (omitting keys not explicitly set on this element).
   const filteredEffective = { ...effective };
@@ -159,8 +187,24 @@ export const applyEffectiveSettings = (target, irNode) => {
 export const applyComponentSettings = (target, irNode, kind = 'text') => {
   if (!target || !irNode) return;
   const effective = getEffectiveSettings(irNode);
-  const subset = pickSettings(effective, kind === 'media' ? MEDIA_STYLE_KEYS : TEXT_STYLE_KEYS);
   const own = irNode?.styleMap?.own || irNode?.ownSettings || {};
+
+  // Fix 5: When a button-like <a> ancestor is in the cascade, strip its
+  // textColor / fontSize / fontWeight from the effective settings before
+  // applying them to child components so they don't inherit button contrast colours.
+  const buttonAncestor = isButtonAncestorInCascade(irNode);
+  const safeEffective = { ...effective };
+  if (buttonAncestor && !own.textColor) {
+    delete safeEffective.textColor;
+  }
+  if (buttonAncestor && !own.fontSize) {
+    delete safeEffective.fontSize;
+  }
+  if (buttonAncestor && !own.fontWeight) {
+    delete safeEffective.fontWeight;
+  }
+
+  const subset = pickSettings(safeEffective, kind === 'media' ? MEDIA_STYLE_KEYS : TEXT_STYLE_KEYS);
   target.settings = {
     ...(target.settings || {}),
     ...subset,

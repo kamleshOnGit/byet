@@ -507,33 +507,84 @@ const nodeFromDom = (node, ctx) => {
     };
   }
 
+  // Fix 3: Don't prematurely collapse elements that have rich inner content
+  // (nested images, links, styled spans, nested tables) into a plain-text
+  // component — that discards all child nodes and formatting.
+  // Only apply the direct TAG→COMPONENT mapping when the element is truly
+  // a simple leaf: no child ELEMENT nodes of significance.
   if (mappedType) {
+    const hasRichChildren =
+      contentSignature.hasImage ||
+      contentSignature.hasLink ||
+      contentSignature.hasButtonLike ||
+      contentSignature.hasNestedTable ||
+      // More than one inline wrapper suggests formatted rich text that needs
+      // to be preserved as raw HTML rather than collapsed to plain string.
+      (contentSignature.hasInlineWrapper && children.some(
+        (c) => c.kind === IR_NODE_KIND.COMPONENT || (c.kind === IR_NODE_KIND.ELEMENT && c.children?.length > 0)
+      ));
+
+    if (!hasRichChildren) {
+      // Safe to collapse: simple text-only element
+      return {
+        ...base,
+        kind: IR_NODE_KIND.COMPONENT,
+        type: mappedType,
+        props: {
+          text: `${el.textContent || ''}`.replace(/\s+/g, ' ').trim(),
+        },
+        children: [],
+      };
+    }
+    // Has rich children — fall through as a structural ELEMENT so children
+    // are preserved and scanIrStructure can render them properly.
+    // Tag hint is preserved on the node so downstream code can still identify it.
     return {
       ...base,
-      kind: IR_NODE_KIND.COMPONENT,
-      type: mappedType,
-      props: {
-        text: `${el.textContent || ''}`,
-      },
+      _mappedType: mappedType, // hint for downstream (non-breaking)
+      children,
     };
   }
 
   return base;
 };
 
-// Strip MSO/VML conditional comments before parsing to prevent ghost TDs.
-// <!--[if mso]>...<![endif]--> blocks can contain <td> tags that the HTML5 parser
-// partially leaks into the DOM, creating spurious extra columns in the editor.
+// ---------------------------------------------------------------------------
+// Fix 2: Upgraded MSO / VML / Office namespace cleaner.
+// Handles all known Outlook-specific constructs that leak ghost DOM nodes:
+//   <!--[if mso]>…<![endif]-->   downlevel-hidden IE/MSO conditionals
+//   <![if !mso]>…<![endif]>      downlevel-revealed conditionals
+//   <v:…>                        VML elements (v: namespace)
+//   <o:p>, <o:v>, <o:…>          Office namespace elements (o: namespace)
+//   xmlns:o / xmlns:v            Namespace declarations (benign but noisy)
+//   mso-* inline style values    Left in-place (they are ignored by DOMParser)
+// ---------------------------------------------------------------------------
 const stripMsoConditionals = (html) => {
   if (!html) return html;
   let result = String(html);
-  // Remove MSO downlevel-hidden conditional comments: <!--[if mso]>...<![endif]-->
-  result = result.replace(/<!--\[if[\s\S]*?\[endif\]-->/gi, '');
-  // Remove downlevel-revealed conditional comments: <![if !...]>...<![endif]>
-  result = result.replace(/<!\[if[\s\S]*?\[endif\]>/gi, '');
-  // Remove VML v: elements (v:roundrect, v:stroke, etc.)
-  result = result.replace(/<v:[a-z][a-z0-9]*[\s\S]*?<\/v:[a-z][a-z0-9]*>/gi, '');
-  result = result.replace(/<v:[a-z][a-z0-9]*[^>]*\/>/gi, '');
+
+  // 1. Remove MSO downlevel-hidden conditional blocks: <!--[if mso]>…<![endif]-->
+  //    Use a two-pass approach: greedy first, then leftover fragments.
+  result = result.replace(/<!--\[if\b[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, '');
+  // Leftover opening tags that weren't closed (malformed)
+  result = result.replace(/<!--\[if\b[^\]]*\]>[\s\S]*?$/gi, '');
+
+  // 2. Remove downlevel-revealed conditionals: <![if !mso]>…<![endif]>
+  result = result.replace(/<!\[if\b[^\]]*\]>[\s\S]*?<!\[endif\]>/gi, '');
+
+  // 3. Remove VML paired elements: <v:tagname …>…</v:tagname>
+  result = result.replace(/<v:[a-z][a-z0-9]*(?:\s[^>]*)?>[\s\S]*?<\/v:[a-z][a-z0-9]*>/gi, '');
+  // Remove VML self-closing elements: <v:tagname … />
+  result = result.replace(/<v:[a-z][a-z0-9]*(?:\s[^>]*)?\/?>/gi, '');
+
+  // 4. Fix 2 (new): Remove Office namespace paired elements: <o:p>, <o:v>, etc.
+  result = result.replace(/<o:[a-z][a-z0-9]*(?:\s[^>]*)?>[\s\S]*?<\/o:[a-z][a-z0-9]*>/gi, '');
+  // Remove Office namespace self-closing elements
+  result = result.replace(/<o:[a-z][a-z0-9]*(?:\s[^>]*)?\/?>/gi, '');
+
+  // 5. Remove xml namespace declarations that confuse some parsers
+  result = result.replace(/\s+xmlns:[a-z]+\s*=\s*["'][^"']*["']/gi, '');
+
   return result;
 };
 

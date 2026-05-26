@@ -70,35 +70,125 @@ const collectTableNodes = (nodes = [], bucket = []) => {
   return bucket;
 };
 
+// ---------------------------------------------------------------------------
+// Fix 4: Dominant-table heuristic — prefer CONTENT-DENSE tables over wide
+// wrapper tables.  Email templates are typically structured as:
+//   outer wrapper table (width:100%, 1 row, 1 td)
+//     → inner container table (width:600px, many rows)
+//       → actual content rows
+// The old algorithm scored by row-count, which made it pick the outer wrapper
+// (score = 1 row × 10 + few descendants) when the inner table had more rows.
+// The new algorithm:
+//   1. Strongly rewards tables whose direct <td> cells contain leaf components
+//      (text, images, links) — content density per TD.
+//   2. Rewards deeper nesting (content tables sit deeper than wrappers).
+//   3. Penalises tables that are pure single-cell wrappers (1 TR × 1 TD with
+//      no direct leaf content) — these are structural envelopes, not content.
+// ---------------------------------------------------------------------------
+const scoreTableNode = (tableNode) => {
+  const rows = getDirectRowNodes(tableNode);
+  const rowCount = rows.length;
+  // Count direct leaf-component descendants (not recursing into nested tables)
+  let directLeaves = 0;
+  let directCells = 0;
+  let maxCellsInRow = 0;
+  rows.forEach((rowNode) => {
+    const tds = (rowNode.children || []).filter((c) => `${c?.tag || ''}`.toLowerCase() === 'td');
+    directCells += tds.length;
+    maxCellsInRow = Math.max(maxCellsInRow, tds.length);
+    tds.forEach((td) => {
+      // Count immediate child components (not recursing through nested tables)
+      (td.children || []).forEach((child) => {
+        if (child.kind === IR_NODE_KIND.COMPONENT) directLeaves += 1;
+        else if (child.kind === IR_NODE_KIND.TEXT && `${child.text || ''}`.trim()) directLeaves += 1;
+      });
+    });
+  });
+
+  // Structural wrapper penalty: single-row, single-cell, no direct leaves
+  const isPureWrapper =
+    rowCount === 1 &&
+    directCells <= 1 &&
+    directLeaves === 0;
+
+  // Depth bonus: content tables tend to be deeply nested
+  const depth = tableNode?.relation?.depth || 0;
+
+  return (
+    (directLeaves * 50) +      // strongest signal: direct renderable content
+    (directCells * 10) +       // multi-column rows are content indicators
+    (maxCellsInRow * 8) +      // widest row shows column count
+    (rowCount * 5) +           // more rows = more content sections
+    (depth * 3) -              // deeper = more likely to be inner content table
+    (isPureWrapper ? 200 : 0)  // penalise pure wrapper envelopes
+  );
+};
+
 const selectDominantTableNode = (irDoc) => {
   const tables = collectTableNodes(irDoc?.nodes || []).filter(isMeaningfulTableNode);
   if (tables.length === 0) return null;
+  if (tables.length === 1) return tables[0];
 
   return tables.reduce((best, candidate) => {
     if (!best) return candidate;
-    const candidateRows = getDirectRowNodes(candidate).length;
-    const bestRows = getDirectRowNodes(best).length;
-    const candidateScore = (candidateRows * 10) + countRenderableDescendants(candidate);
-    const bestScore = (bestRows * 10) + countRenderableDescendants(best);
-    return candidateScore > bestScore ? candidate : best;
+    return scoreTableNode(candidate) > scoreTableNode(best) ? candidate : best;
   }, null);
 };
 
 const collectMeaningfulChildren = (node, predicate) => (node?.children || []).filter((child) => predicate(`${child?.tag || ''}`.toLowerCase(), child));
 
-// Detect spacer/gutter TD nodes: zero-content TDs used only for spacing (e.g. class l0-s0, font-size:0)
+// ---------------------------------------------------------------------------
+// Fix 6: Hardened gutter/spacer TD detection.
+// Covers patterns from Outlook 2-3 column layouts, MJML, Campaign Monitor,
+// Mailchimp, Co-Lab, and generic table-based email frameworks.
+// A TD is a gutter ONLY when it has NO renderable content AND matches at
+// least one structural spacer indicator — preventing false positives on TDs
+// that genuinely contain text or images.
+// ---------------------------------------------------------------------------
 const isGutterTdNode = (node) => {
   if (`${node?.tag || ''}`.toLowerCase() !== 'td') return false;
   const sig = node?.contentSignature || {};
-  if (sig.hasImage || sig.hasLink || sig.hasNestedTable) return false;
-  // Gutter TDs typically have shouldSkip hint or only nbsp/whitespace content
+
+  // Hard safety: TDs with actual content are NEVER gutters
+  if (sig.hasImage || sig.hasLink || sig.hasNestedTable || sig.hasButtonLike) return false;
+
+  // Also guard against TDs with meaningful text (more than just &nbsp;/whitespace)
+  const innerText = `${node?.outerHTML || ''}`.replace(/<[^>]+>/g, '').replace(/&nbsp;|\s/g, '').trim();
+  if (innerText.length > 0) return false;
+
+  // From this point the TD has no renderable content — check spacer indicators.
+
+  // 1. Layout hint set by detectLayoutHints() in htmlToIr
   if (node?.layoutHints?.shouldSkip) return true;
-  // Check for font-size:0 style (classic gutter pattern)
+
   const styleRaw = `${node?.attrs?.style || ''}`;
+  const cls = `${node?.attrs?.class || ''}`.toLowerCase();
+  const widthAttr = `${node?.attrs?.width || ''}`;
+
+  // 2. font-size:0 — classic gutter trick (invisible text, zero-height)
   if (/font-size\s*:\s*0/i.test(styleRaw)) return true;
-  // Class pattern: l{n}-s{n} (spacer columns in multi-column layouts)
-  const cls = `${node?.attrs?.class || ''}`;
-  if (/\bl\d+-s\d+\b/i.test(cls)) return true;
+
+  // 3. line-height:0 combined with no content
+  if (/line-height\s*:\s*0/i.test(styleRaw)) return true;
+
+  // 4. Explicit zero-width (width:0, width:0px, width="0")
+  if (/width\s*:\s*0\s*(px)?[;"]?/i.test(styleRaw)) return true;
+  if (widthAttr === '0' || widthAttr === '0px') return true;
+
+  // 5. Named spacer class patterns from common email frameworks:
+  //    Co-Lab:          l{n}-s{n}
+  //    Generic:         spacer, gutter, divider, gap, separator, col-gap
+  //    Mailchimp/MJML:  mj-column-per-*, mc-gutter
+  //    Campaign Monitor: spacer-*
+  if (/\bl\d+-s\d+\b/.test(cls)) return true;
+  if (/\b(spacer|gutter|divider|gap-col|col-gap|mj-column-per|mc-gutter|spacer-[a-z])\b/.test(cls)) return true;
+
+  // 6. Explicit display:none — hidden TDs used for Outlook compatibility
+  if (/display\s*:\s*none/i.test(styleRaw)) return true;
+
+  // 7. mso-hide:all — Outlook-specific hide directive  
+  if (/mso-hide\s*:\s*all/i.test(styleRaw)) return true;
+
   return false;
 };
 
@@ -408,7 +498,69 @@ const buildRowsFromTableNode = (tableNode) => {
   }).filter((row) => (row.columns || []).length > 0);
 };
 
-export const scanIrToStructureMap = (irDoc) => {
+// ---------------------------------------------------------------------------
+// Fix 8: Div-layout walk — for templates that use <div>-based layouts
+// (no meaningful <table> structure).  Treats top-level and direct-child block
+// divs as rows, and their children as single-column content.
+// Activated when options.allowDivWalk === true or when no dominant table exists.
+// ---------------------------------------------------------------------------
+const BLOCK_DIV_TAGS = new Set(['div', 'section', 'article', 'main', 'header', 'footer', 'aside', 'nav']);
+
+const buildRowsFromDivNode = (containerNode) => {
+  const children = containerNode?.children || [];
+  const rows = [];
+
+  children.forEach((child) => {
+    if (!child || child.kind === IR_NODE_KIND.TEXT) return;
+    const tag = `${child.tag || ''}`.toLowerCase();
+
+    // Skip invisible/noise elements
+    if (child?.layoutHints?.shouldSkip) return;
+
+    // Each block-level div/section/article becomes a row
+    if (BLOCK_DIV_TAGS.has(tag)) {
+      const row = createStructureRow(child);
+      addScanReasons(row, ['div_block_row'], 0.75);
+      const column = createStructureColumn(child, 12);
+      addScanReasons(column, ['div_single_column'], 0.75);
+
+      // If the div has multiple block children, try to make them parallel columns
+      const blockChildren = (child.children || []).filter((c) => BLOCK_DIV_TAGS.has(`${c?.tag || ''}`.toLowerCase()));
+      if (blockChildren.length > 1) {
+        const siblingCount = blockChildren.length;
+        row.columns = blockChildren.map((blockChild, idx) => {
+          const col = createStructureColumn(blockChild, Math.floor(12 / siblingCount));
+          addScanReasons(col, ['div_parallel_column'], 0.7);
+          appendNodeContentToColumn(blockChild, col);
+          return col;
+        }).filter(isColumnMeaningful);
+      } else {
+        appendNodeContentToColumn(child, column);
+        if (isColumnMeaningful(column)) {
+          row.columns = [column];
+        }
+      }
+
+      if ((row.columns || []).length > 0) {
+        rows.push(row);
+      }
+    } else if (child.kind === IR_NODE_KIND.COMPONENT || hasRenderableContentSignature(child)) {
+      // Inline component at root level — wrap in a row
+      const row = createStructureRow(child);
+      addScanReasons(row, ['div_inline_component_row'], 0.65);
+      const column = createStructureColumn(child, 12);
+      appendNodeContentToColumn(child, column);
+      if (isColumnMeaningful(column)) {
+        row.columns = [column];
+        rows.push(row);
+      }
+    }
+  });
+
+  return rows;
+};
+
+export const scanIrToStructureMap = (irDoc, options = {}) => {
   const dominantTable = selectDominantTableNode(irDoc);
   if (dominantTable) {
     const section = createStructureSection(dominantTable);
@@ -427,6 +579,41 @@ export const scanIrToStructureMap = (irDoc) => {
     }
   }
 
+  // Fix 8: Div-layout walk — used when no dominant table found OR explicitly requested
+  if (options.allowDivWalk || !dominantTable) {
+    // Find the deepest meaningful container div (body-level wrapper)
+    const topNodes = irDoc?.nodes || [];
+    const containerCandidates = topNodes.filter((n) => {
+      const tag = `${n?.tag || ''}`.toLowerCase();
+      return BLOCK_DIV_TAGS.has(tag) && hasRenderableContentSignature(n);
+    });
+
+    if (containerCandidates.length > 0) {
+      // Pick the candidate with the most renderable descendants
+      const container = containerCandidates.reduce((best, c) =>
+        countRenderableDescendants(c) > countRenderableDescendants(best) ? c : best
+      );
+
+      const divRows = buildRowsFromDivNode(container);
+      if (divRows.length > 0) {
+        const section = createStructureSection(container);
+        addScanReasons(section, ['div_layout_root'], 0.75);
+        section.rows = normalizeScannedRows(divRows, section);
+        if (section.rows.length > 0) {
+          return {
+            sections: [section],
+            diagnostics: {
+              mode: 'div_walk',
+              dominantTableId: null,
+              dominantTableTag: null,
+            },
+          };
+        }
+      }
+    }
+  }
+
+  // Final fallback: treat every IR node with content as its own section
   const sections = [];
   (irDoc?.nodes || []).forEach((node) => {
     if (node?.kind === IR_NODE_KIND.COMPONENT || node?.kind === IR_NODE_KIND.TEXT || hasRenderableContentSignature(node)) {

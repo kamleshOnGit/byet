@@ -159,6 +159,54 @@ const DroppableColumn = ({ column, colSpan, parentId, rowId, syncEditorToHtml, o
             selectedTarget={selectedTarget}
           />
         ))}
+
+      {/* Render nestedRows — multi-column sub-layouts from complex template imports.
+          These are shown read-only in the editor as a visual preview row so the user
+          can see the imported content.  They can be promoted to full editor rows via
+          the store once the user interacts with them. */}
+      {(column.nestedRows || []).length > 0 && (
+        <Box width="100%" mt={0}>
+          {(column.nestedRows || []).map((nestedRow) => (
+            <Box
+              key={nestedRow.id}
+              display="flex"
+              flexDirection="row"
+              width="100%"
+              style={{
+                backgroundColor: nestedRow?.settings?.backgroundColor && nestedRow.settings.backgroundColor !== 'transparent'
+                  ? nestedRow.settings.backgroundColor : undefined,
+              }}
+            >
+              {(nestedRow.columns || []).map((nestedCol) => (
+                <Box
+                  key={nestedCol.id}
+                  flex={nestedCol.size || 12}
+                  style={{
+                    backgroundColor: nestedCol?.settings?.backgroundColor && nestedCol.settings.backgroundColor !== 'transparent'
+                      ? nestedCol.settings.backgroundColor : undefined,
+                    padding: nestedCol?.settings?.padding
+                      ? `${nestedCol.settings.padding.top || 0}px ${nestedCol.settings.padding.right || 0}px ${nestedCol.settings.padding.bottom || 0}px ${nestedCol.settings.padding.left || 0}px`
+                      : undefined,
+                  }}
+                >
+                  {(nestedCol.components || []).map((nestedComp, nestedIdx) => (
+                    <DraggableComponentInColumn
+                      key={nestedComp.id}
+                      component={nestedComp}
+                      index={nestedIdx}
+                      columnId={nestedCol.id}
+                      parentId={parentId}
+                      rowId={rowId}
+                      onSelect={onSelect}
+                      selectedTarget={selectedTarget}
+                    />
+                  ))}
+                </Box>
+              ))}
+            </Box>
+          ))}
+        </Box>
+      )}
     </Box>
   );
 };

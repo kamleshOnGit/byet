@@ -1,29 +1,85 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, Button, Text, VStack } from '@chakra-ui/react';
+import { Box, Button, Text, VStack, Alert, AlertIcon, AlertDescription, CloseButton, Progress } from '@chakra-ui/react';
 import { AddIcon, EditIcon } from '@chakra-ui/icons';
 import { parseHtmlToSections } from './utils/htmlParser';
 import { htmlToIr } from './import/htmlToIr';
 import { irToSections, scanIrToStructureMap } from './ir/irToSections';
 
-const EmailList = () => {
-  const navigate = useNavigate();
-  const fileRef = useRef(null);
+// ---------------------------------------------------------------------------
+// Asset inlining — converts local relative image src values to data: URIs so
+// they display correctly inside the editor regardless of CORS or file:/// rules.
+// ---------------------------------------------------------------------------
 
-  const normalizeImportedUrl = (value, assetBaseUrl) => {
-    if (!value) return '';
-    const raw = `${value}`.trim();
-    if (!raw || raw.startsWith('data:') || raw.startsWith('cid:') || raw.startsWith('#')) return raw;
-    if (/^(https?:|file:|mailto:|tel:)/i.test(raw)) return raw;
-    if (!assetBaseUrl) return raw;
-    try {
-      return new URL(raw, assetBaseUrl).toString();
-    } catch (err) {
-      return raw;
-    }
-  };
+/**
+ * Walk all image File objects from a FileList (folder upload) and build a map
+ * of  filename → data: URI  so we can patch <img src="..."> values inline.
+ * Also handles single-file uploads: we inline any images already present in
+ * the HTML that have file:// or absolute paths by fetching them.
+ */
+const buildAssetDataUrlMap = async (imageFiles = []) => {
+  const map = {};
+  await Promise.all(
+    Array.from(imageFiles).map(
+      (file) =>
+        new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            map[file.name] = reader.result || '';
+            // Also store by webkitRelativePath basename for folder uploads
+            if (file.webkitRelativePath) {
+              map[file.webkitRelativePath] = reader.result || '';
+            }
+            resolve();
+          };
+          reader.onerror = () => resolve();
+          reader.readAsDataURL(file);
+        })
+    )
+  );
+  return map;
+};
 
-  const normalizeImportedSectionsUrls = (sections = [], assetBaseUrl = '') => sections.map((section) => ({
+/**
+ * Replace all <img src="..."> values in raw HTML text with data: URIs from
+ * the asset map.  Handles:
+ *   - Bare filenames:        images/logo.png  → map["images/logo.png"]
+ *   - Relative paths:        ../images/x.jpg  → map["../images/x.jpg"]
+ *   - Already-absolute file: file:///C:/…     → left as-is (no map entry)
+ *   - data:/http(s)          → left untouched
+ */
+const patchHtmlImageSrcs = (htmlText, assetMap) => {
+  if (!assetMap || Object.keys(assetMap).length === 0) return htmlText;
+  return htmlText.replace(/(<img\b[^>]*?\bsrc\s*=\s*)(["'])([^"']+)\2/gi, (match, prefix, quote, src) => {
+    // Skip already-inlined or remote assets
+    if (/^(data:|https?:|cid:|#)/i.test(src)) return match;
+    // Try exact match first
+    if (assetMap[src]) return `${prefix}${quote}${assetMap[src]}${quote}`;
+    // Try basename match (strip path prefix)
+    const basename = src.replace(/.*[/\\]/, '');
+    if (assetMap[basename]) return `${prefix}${quote}${assetMap[basename]}${quote}`;
+    return match;
+  });
+};
+
+// ---------------------------------------------------------------------------
+// URL normalization helpers
+// ---------------------------------------------------------------------------
+const normalizeImportedUrl = (value, assetBaseUrl) => {
+  if (!value) return '';
+  const raw = `${value}`.trim();
+  if (!raw || raw.startsWith('data:') || raw.startsWith('cid:') || raw.startsWith('#')) return raw;
+  if (/^(https?:|file:|mailto:|tel:)/i.test(raw)) return raw;
+  if (!assetBaseUrl) return raw;
+  try {
+    return new URL(raw, assetBaseUrl).toString();
+  } catch {
+    return raw;
+  }
+};
+
+const normalizeImportedSectionsUrls = (sections = [], assetBaseUrl = '') =>
+  sections.map((section) => ({
     ...section,
     settings: {
       ...(section?.settings || {}),
@@ -54,49 +110,66 @@ const EmailList = () => {
     })),
   }));
 
-  const getSavedFromBaseUrl = (htmlText = '') => {
-    const match = `${htmlText}`.match(/saved from url=\([^)]*\)(https?:\/\/[^\s>]+)/i);
-    const rawUrl = match?.[1] || '';
-    if (!rawUrl) return '';
-    try {
-      return new URL('.', rawUrl).toString();
-    } catch (err) {
-      return '';
-    }
-  };
-
-
-  const hasRenderableImportedContent = (sections = []) => sections.some((section) =>
-    (section?.rows || []).some((row) =>
-      (row?.columns || []).some((column) => (column?.components || []).length > 0)
-    )
-  );
-
-  const getImportedFileBaseUrl = (file) => {
-    const filePath = file?.path || '';
-    if (filePath) {
-      try {
-        const normalizedPath = `${filePath}`.replace(/\\/g, '/');
-        const slashIndex = normalizedPath.lastIndexOf('/');
-        const dirPath = slashIndex >= 0 ? normalizedPath.slice(0, slashIndex + 1) : normalizedPath;
-        return new URL(`file:///${dirPath.replace(/^\/+/, '')}`).toString();
-      } catch (err) {
-        return '';
-      }
-    }
-    const relPath = file?.webkitRelativePath || '';
-    if (relPath) {
-      try {
-        const normalized = `${relPath}`.replace(/\\/g, '/');
-        const slashIndex = normalized.lastIndexOf('/');
-        const dirPath = slashIndex >= 0 ? normalized.slice(0, slashIndex + 1) : '';
-        if (dirPath) return new URL(dirPath, window.location.href).toString();
-      } catch (err) {
-        return '';
-      }
-    }
+const getSavedFromBaseUrl = (htmlText = '') => {
+  const match = `${htmlText}`.match(/saved from url=\([^)]*\)(https?:\/\/[^\s>]+)/i);
+  const rawUrl = match?.[1] || '';
+  if (!rawUrl) return '';
+  try {
+    return new URL('.', rawUrl).toString();
+  } catch {
     return '';
-  };
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Fix 7: Quality scoring — count renderable components, not just presence.
+// Returns { count, score } so callers can compare parsers numerically.
+// ---------------------------------------------------------------------------
+const countImportedComponents = (sections = []) => {
+  let count = 0;
+  let hasMultiColumn = false;
+  sections.forEach((section) => {
+    (section?.rows || []).forEach((row) => {
+      const cols = row?.columns || [];
+      if (cols.length > 1) hasMultiColumn = true;
+      cols.forEach((column) => {
+        count += (column?.components || []).length;
+        // Components inside nestedRows count too
+        (column?.nestedRows || []).forEach((nestedRow) => {
+          (nestedRow?.columns || []).forEach((nc) => {
+            count += (nc?.components || []).length;
+          });
+        });
+      });
+    });
+  });
+  // Bonus: multi-column layouts are structurally richer → prefer them
+  return { count, score: count + (hasMultiColumn ? 10 : 0) };
+};
+
+// eslint-disable-next-line no-unused-vars
+const hasRenderableImportedContent = (sections = []) =>
+  countImportedComponents(sections).count > 0;
+
+// ---------------------------------------------------------------------------
+// Fix 8: Div-layout detection — determine if the template is div-based
+// (no meaningful <table> elements) so we can apply a different scan strategy.
+// ---------------------------------------------------------------------------
+const isDivBasedTemplate = (htmlText = '') => {
+  const lower = htmlText.toLowerCase();
+  // Count table occurrences and div occurrences
+  const tableMatches = (lower.match(/<table\b/g) || []).length;
+  const divMatches = (lower.match(/<div\b/g) || []).length;
+  // If no tables at all, or divs vastly outnumber tables (modern CSS layout)
+  return tableMatches === 0 || (divMatches > 0 && tableMatches < 2 && divMatches > tableMatches * 3);
+};
+
+const EmailList = () => {
+  const navigate = useNavigate();
+  const fileRef = useRef(null);
+  const folderRef = useRef(null);
+  const [importError, setImportError] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
 
   const handleCreate = () => {
     navigate('/create');
@@ -106,49 +179,96 @@ const EmailList = () => {
     if (fileRef.current) fileRef.current.click();
   };
 
-  const handleFileChange = async (e) => {
-    const file = e?.target?.files?.[0];
-    if (!file) return;
+  // Fix 9: central error display helper
+  const showImportError = (msg) => {
+    setImportError(msg);
+    setTimeout(() => setImportError(''), 8000);
+  };
 
+  const processImport = async (htmlFile, siblingImageFiles = []) => {
+    setIsImporting(true);
+    setImportError('');
     try {
-      if (!file.name.match(/\.(html|htm)$/i)) {
-        alert('Please select an HTML file');
+      // File size guard (10 MB)
+      if (htmlFile.size > 10 * 1024 * 1024) {
+        showImportError('File is too large (max 10 MB). Please use a smaller template.');
         return;
       }
-      const text = await file.text();
-      const assetBaseUrl = getImportedFileBaseUrl(file) || getSavedFromBaseUrl(text);
-      let importedSections;
-      let importedTemplateSettings;
-      const parsedTemplate = parseHtmlToSections(text);
-      if (!parsedTemplate) return;
 
-      const importedIr = htmlToIr(text, { assetBaseUrl });
-      let mappedIrSections = [];
-      let irScan = { sections: [], diagnostics: {} };
+      let text = await htmlFile.text();
+
+      // Fix 1: Build asset map from sibling image files (folder upload)
+      // and patch relative <img src> values with data: URIs inline.
+      const assetMap = siblingImageFiles.length > 0
+        ? await buildAssetDataUrlMap(siblingImageFiles)
+        : {};
+      if (Object.keys(assetMap).length > 0) {
+        text = patchHtmlImageSrcs(text, assetMap);
+      }
+
+      // Fall back: try to resolve a base URL from saved-from comment
+      const assetBaseUrl = getSavedFromBaseUrl(text);
+
+      // Fix 8: choose parsing strategy based on template structure
+      const divBased = isDivBasedTemplate(text);
+
+      // ---- Legacy parser (always runs as baseline) ----
+      let parsedTemplate = null;
       try {
-        irScan = scanIrToStructureMap(importedIr);
-        mappedIrSections = (irScan.sections || []).length > 0 ? irScan.sections : irToSections(importedIr);
+        parsedTemplate = parseHtmlToSections(text);
+      } catch (legacyErr) {
+        console.warn('Legacy parser error:', legacyErr);
+      }
+
+      if (!parsedTemplate) {
+        // Legacy parser returned nothing meaningful
+        if (!divBased) {
+          showImportError('Could not parse the HTML template. The file may be corrupted or use an unsupported structure.');
+          return;
+        }
+      }
+
+      // ---- IR parser ----
+      let importedIr = null;
+      let mappedIrSections = [];
+      try {
+        importedIr = htmlToIr(text, { assetBaseUrl, isDivBased: divBased });
+        let irScan = { sections: [] };
+        irScan = scanIrToStructureMap(importedIr, { allowDivWalk: divBased });
+        mappedIrSections = irScan.sections?.length > 0 ? irScan.sections : irToSections(importedIr);
       } catch (irErr) {
-        console.error('IR structure mapping failed during comparison:', irErr);
+        console.warn('IR structure mapping failed:', irErr);
       }
 
-      const legacySections = Array.isArray(parsedTemplate)
-        ? parsedTemplate
-        : parsedTemplate.sections;
-      importedTemplateSettings = Array.isArray(parsedTemplate)
-        ? null
-        : parsedTemplate.templateSettings;
+      const legacySections = parsedTemplate
+        ? (Array.isArray(parsedTemplate) ? parsedTemplate : parsedTemplate.sections)
+        : [];
+      const importedTemplateSettings = parsedTemplate && !Array.isArray(parsedTemplate)
+        ? parsedTemplate.templateSettings
+        : null;
 
+      // Fix 7: quality scoring — pick the parser that produced more components
+      const irQuality = countImportedComponents(mappedIrSections);
+      const legacyQuality = countImportedComponents(legacySections);
 
-      const irLooksUsable = hasRenderableImportedContent(mappedIrSections);
-      const useIrSections = irLooksUsable;
-      if (useIrSections) {
+      let importedSections;
+      let chosenParser;
+      if (irQuality.score >= legacyQuality.score && irQuality.count > 0) {
         importedSections = normalizeImportedSectionsUrls(mappedIrSections, assetBaseUrl);
-      } else {
+        chosenParser = 'ir';
+      } else if (legacyQuality.count > 0) {
         importedSections = normalizeImportedSectionsUrls(legacySections, assetBaseUrl);
+        chosenParser = 'legacy';
+      } else {
+        // Fix 9: neither parser extracted anything
+        showImportError(
+          'No editable content could be found in the template. ' +
+          'The file may use unsupported markup (e.g., CSS grid, SVG-only layout).'
+        );
+        return;
       }
 
-      if (!importedSections) return;
+      console.info(`[import] Using ${chosenParser} parser. IR score=${irQuality.score}, legacy score=${legacyQuality.score}`);
 
       navigate('/create', {
         state: {
@@ -158,15 +278,49 @@ const EmailList = () => {
         },
       });
     } catch (err) {
-      console.error('Failed to read uploaded file:', err);
+      console.error('Failed to import file:', err);
+      // Fix 9: surface the error to the user
+      showImportError(
+        `Import failed: ${err?.message || 'Unknown error'}. ` +
+        'Please check the file and try again.'
+      );
     } finally {
+      setIsImporting(false);
       if (fileRef.current) fileRef.current.value = '';
+      if (folderRef.current) folderRef.current.value = '';
     }
+  };
+
+  const handleFileChange = async (e) => {
+    const files = Array.from(e?.target?.files || []);
+    if (files.length === 0) return;
+    const htmlFile = files.find((f) => /\.(html|htm)$/i.test(f.name));
+    if (!htmlFile) {
+      showImportError('Please select an HTML file (.html or .htm).');
+      return;
+    }
+    const imageFiles = files.filter((f) => /\.(png|jpe?g|gif|svg|webp|bmp|ico)$/i.test(f.name));
+    await processImport(htmlFile, imageFiles);
   };
 
   return (
     <Box minH="calc(100vh - 72px)" display="flex" alignItems="center" justifyContent="center" p={8}>
-      <VStack spacing={6} align="stretch" w="320px">
+      <VStack spacing={6} align="stretch" w="340px">
+        {importError && (
+          <Alert status="error" borderRadius="md">
+            <AlertIcon />
+            <AlertDescription fontSize="sm" flex="1">{importError}</AlertDescription>
+            <CloseButton size="sm" onClick={() => setImportError('')} ml={2} />
+          </Alert>
+        )}
+
+        {isImporting && (
+          <Box>
+            <Text fontSize="sm" color="gray.500" mb={1}>Importing template…</Text>
+            <Progress size="xs" isIndeterminate colorScheme="teal" borderRadius="full" />
+          </Box>
+        )}
+
         <Button
           onClick={handleCreate}
           leftIcon={<AddIcon />}
@@ -174,6 +328,7 @@ const EmailList = () => {
           size="lg"
           justifyContent="flex-start"
           h="56px"
+          isDisabled={isImporting}
         >
           Create
         </Button>
@@ -186,18 +341,24 @@ const EmailList = () => {
           size="lg"
           justifyContent="flex-start"
           h="56px"
+          isDisabled={isImporting}
+          isLoading={isImporting}
+          loadingText="Importing…"
         >
-          Edit
+          Edit (Upload Template)
         </Button>
 
         <Text fontSize="sm" color="gray.500" textAlign="center">
-          Upload an HTML email template or signature to edit and download.
+          Upload an HTML email template to edit and download.
+          For templates with local images, use the folder upload or ensure images are embedded.
         </Text>
 
+        {/* Single-file or multi-file (folder) upload — accepts .html + images */}
         <input
           ref={fileRef}
           type="file"
-          accept=".html,text/html"
+          accept=".html,.htm,text/html,image/*"
+          multiple
           style={{ display: 'none' }}
           onChange={handleFileChange}
         />

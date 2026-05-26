@@ -506,44 +506,41 @@ const CreateTemplate = () => {
                   <table role="presentation" width="${containerWidthPx}" cellspacing="0" cellpadding="0" border="0" class="container" style="${containerStyle}">
                     <tr>
                       <td style="vertical-align:top;">
-                        ${sections
-                          .map((section) => {
-                            const rows = section.rows || [];
-                            return rows
-                              .map((row) => {
-                                const columns = row.columns || [];
-                                const rowCellStyle = makeRowCellStyle(row);
-                                const rowSpacer = Number.isFinite(row?.settings?.margin?.bottom) ? row.settings.margin.bottom : 0;
-                                const rowInner = `
-                                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;table-layout:fixed;width:100%;">
-                                    <tr>
-                                      <td style="${rowCellStyle}">
-                                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;table-layout:fixed;width:100%;">
-                                          <tr>
-                                            ${columns
-                                              .map((column) => {
-                                                const widthPct = Math.round(((column.size || 12) / 12) * 100);
-                                                const tdStyle = makeColumnTdStyle(column);
-                                                const content = (column.components || []).map((c) => renderComponent(c)).join('');
-                                                return `
-                                                  <td class="stack-column-cell" width="${widthPct}%" style="width:${widthPct}%;max-width:${widthPct}%;${tdStyle}">
-                                                    ${content}
-                                                  </td>
-                                                `;
-                                              })
-                                              .join('')}
-                                          </tr>
-                                        </table>
-                                      </td>
-                                    </tr>
-                                  </table>
-                                  ${makeSpacerTable(rowSpacer)}
-                                `;
-                                return rowInner;
-                              })
-                              .join('');
-                          })
-                          .join('')}
+                        ${(() => {
+                          // ---------------------------------------------------------------
+                          // Reconstruction Engine — JSON -> Clean Export HTML
+                          // Handles: sections -> rows -> columns -> components + nestedRows.
+                          // nestedRows: multi-column sub-layouts inside a column (hero grids,
+                          // product cards) that are populated during complex template import.
+                          // ---------------------------------------------------------------
+
+                          // Renders one row recursively (supports nestedRows inside columns)
+                          const renderRow = (row) => {
+                            const cols = row.columns || [];
+                            if (cols.length === 0) return '';
+                            const rowCellStyle = makeRowCellStyle(row);
+                            const rowSpacer = Number.isFinite(row && row.settings && row.settings.margin && row.settings.margin.bottom ? row.settings.margin.bottom : NaN) ? row.settings.margin.bottom : 0;
+                            const colsHtml = cols.map((column) => {
+                              const widthPct = Math.round(((column.size || 12) / 12) * 100);
+                              const tdStyle = makeColumnTdStyle(column);
+                              const directContent = (column.components || []).map((c) => renderComponent(c)).join('');
+                              // Recursively render nestedRows (multi-column sub-layouts)
+                              const nestedContent = (column.nestedRows || []).map((nr) => renderRow(nr)).join('');
+                              return '<td class="stack-column-cell" width="' + widthPct + '%" style="width:' + widthPct + '%;max-width:' + widthPct + '%;' + tdStyle + '">' + directContent + nestedContent + '</td>';
+                            }).join('');
+                            return '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;table-layout:fixed;width:100%;"><tr><td style="' + rowCellStyle + '"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;table-layout:fixed;width:100%;"><tr>' + colsHtml + '</tr></table></td></tr></table>' + makeSpacerTable(rowSpacer);
+                          };
+
+                          return sections.map((section) => {
+                            const sectionBg = makeBackgroundStyle((section && section.settings) || {});
+                            const sectionContent = (section.rows || []).map((row) => renderRow(row)).join('');
+                            // Wrap section in background wrapper if it has a background colour/image
+                            if (sectionBg) {
+                              return '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;"><tr><td style="' + sectionBg + 'padding:0;">' + sectionContent + '</td></tr></table>';
+                            }
+                            return sectionContent;
+                          }).join('');
+                        })()}
                       </td>
                     </tr>
                   </table>
