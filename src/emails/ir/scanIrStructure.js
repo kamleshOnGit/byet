@@ -226,17 +226,30 @@ const isStructurallyMeaningfulRow = (row) => {
   return false;
 };
 
-// Detects multiple sibling float:left tables that each contain a single link — classic nav pattern
+// Detects multiple sibling float:left tables that each contain a single link — classic nav pattern.
+// Guard: if ANY float table has an image or non-link content it is a content column cluster,
+// not a navigation menu.  In that case return null so the caller falls through to the
+// float-column detection path instead.
 const detectFloatNavTables = (childNodes) => {
   const tableSiblings = childNodes.filter((n) => `${n?.tag || ''}`.toLowerCase() === 'table');
   if (tableSiblings.length < 2) return null;
-  // At least majority of sibling tables must have float:left style
+  // At least majority of sibling tables must have float:left/right style
   const floatTables = tableSiblings.filter((t) => {
     const floatVal = `${t?.ownSettings?.float || t?.settings?.float || ''}`.toLowerCase();
     return floatVal === 'left' || floatVal === 'right';
   });
   if (floatTables.length < 2) return null;
-  // Check that all non-float tables are also in the same position (i.e. it's a mixed nav)
+
+  // Guard: if any float table contains an image it is a product/content column, not a nav bar.
+  const hasImageInTable = (node) => {
+    if (!node) return false;
+    if (node.kind === IR_NODE_KIND.COMPONENT && node.type === COMPONENT_TYPES.IMAGE) return true;
+    const sig = node?.contentSignature || {};
+    if (sig.hasImage) return true;
+    return (node.children || []).some(hasImageInTable);
+  };
+  if (floatTables.some(hasImageInTable)) return null;
+
   // Extract link text from each float table
   const navItems = [];
   for (const t of floatTables) {
@@ -251,7 +264,7 @@ const detectFloatNavTables = (childNodes) => {
     };
     findLinks(t);
     if (allLinks.length > 0) navItems.push(allLinks[0]);
-    // If a float table has no link (e.g. logo with img), skip it for the menu items list
+    // If a float table has no link (e.g. logo-only) skip it for the menu-items list
   }
   return navItems.length >= 2 ? navItems : null;
 };
@@ -313,6 +326,39 @@ const appendNodeContentToColumn = (node, column) => {
   if (node.kind === IR_NODE_KIND.ELEMENT) {
     const tag = `${node.tag || ''}`.toLowerCase();
     const sig = node.contentSignature || {};
+
+    // -----------------------------------------------------------------------
+    // CSS table-layout multi-column detection (Unlayer / BEE / custom pattern).
+    // A <div style="display:table"> whose direct children have display:table-cell
+    // represents parallel columns — each cell-div becomes a separate column.
+    // We emit a nested row so normalizeScannedRows can promote it correctly.
+    // -----------------------------------------------------------------------
+    if (tag === 'div') {
+      const displayVal = `${node?.ownSettings?.display || ''}`.toLowerCase();
+      if (displayVal === 'table' || displayVal === 'inline-table') {
+        const cellChildren = (node.children || []).filter((c) => {
+          if (`${c?.tag || ''}`.toLowerCase() !== 'div') return false;
+          const cDisplay = `${c?.ownSettings?.display || ''}`.toLowerCase();
+          return cDisplay === 'table-cell' || cDisplay === 'inline-block';
+        });
+        if (cellChildren.length >= 2) {
+          const colSize = Math.floor(12 / cellChildren.length);
+          const nestedRow = createStructureRow(node);
+          addScanReasons(nestedRow, ['css_table_layout_row'], 0.8);
+          nestedRow.columns = cellChildren.map((cellDiv) => {
+            const col = createStructureColumn(cellDiv, colSize);
+            addScanReasons(col, ['css_table_cell_column'], 0.78);
+            (cellDiv.children || []).forEach((grandchild) => appendNodeContentToColumn(grandchild, col));
+            return col;
+          }).filter(isColumnMeaningful);
+          if (nestedRow.columns.length >= 2) {
+            column.nestedRows.push(nestedRow);
+            addScanReasons(column, ['css_table_multi_column_nested'], 0.78);
+            return;
+          }
+        }
+      }
+    }
 
     // Inline-only div/p: spans, text, br — preserve as raw HTML to keep inline flow.
     // Splitting these into individual SPAN components breaks the layout in preview.
@@ -407,11 +453,55 @@ const mergeNestedRowsIntoColumn = (targetColumn, nestedRows = [], reason = 'flat
   addScanReasons(targetColumn, [reason], 0.68);
 };
 
+// ---------------------------------------------------------------------------
+// Helper: extract renderable content from a float table node into a column.
+// Float tables used as columns are typically single-row/single-cell wrappers,
+// so we flatten the first level and merge components directly.
+// ---------------------------------------------------------------------------
+const buildColumnFromFloatTable = (floatTableNode, colSize) => {
+  const col = createStructureColumn(floatTableNode, colSize);
+  addScanReasons(col, ['float_table_column'], 0.82);
+  const floatRows = buildRowsFromTableNode(floatTableNode);
+  floatRows.forEach((fr) => {
+    (fr.columns || []).forEach((innerCol) => {
+      (innerCol.components || []).forEach((comp) => appendComponentToColumn(col, comp));
+      if ((innerCol.nestedRows || []).length > 0) {
+        col.nestedRows.push(...innerCol.nestedRows);
+      }
+    });
+  });
+  return col;
+};
+
 const buildColumnsFromRowNode = (rowNode) => {
   const tdNodes = collectMeaningfulChildren(rowNode, (tag) => tag === 'td');
   // Filter out pure gutter/spacer TDs so siblingCount reflects actual content columns
   const contentTdNodes = tdNodes.filter((n) => !isGutterTdNode(n));
-  const columnNodes = contentTdNodes.length > 0 ? contentTdNodes : (tdNodes.length > 0 ? tdNodes : [rowNode]);
+  let columnNodes = contentTdNodes.length > 0 ? contentTdNodes : (tdNodes.length > 0 ? tdNodes : [rowNode]);
+
+  // ---------------------------------------------------------------------------
+  // Float-based multi-column detection (Stripo / Esputnik pattern).
+  // When a single TD wraps ≥2 sibling tables with float:left / float:right the
+  // float tables ARE the parallel columns — not a single wide cell.
+  // detectFloatNavTables already guards the nav-link case; here we handle the
+  // generic content-column case (images, text, products, etc.).
+  // ---------------------------------------------------------------------------
+  if (columnNodes.length === 1) {
+    const singleTd = columnNodes[0];
+    const floatTableSiblings = (singleTd.children || []).filter((child) => {
+      if (`${child?.tag || ''}`.toLowerCase() !== 'table') return false;
+      const floatVal = `${child?.ownSettings?.float || child?.settings?.float || ''}`.toLowerCase();
+      return floatVal === 'left' || floatVal === 'right';
+    });
+    if (floatTableSiblings.length >= 2) {
+      const colSize = Math.floor(12 / floatTableSiblings.length);
+      const floatColumns = floatTableSiblings
+        .map((ft) => buildColumnFromFloatTable(ft, colSize))
+        .filter(isColumnMeaningful);
+      if (floatColumns.length >= 2) return floatColumns;
+    }
+  }
+
   const siblingCount = columnNodes.length;
   return columnNodes.map((columnNode) => {
     const column = createStructureColumn(columnNode, inferColumnSize(columnNode, siblingCount));
@@ -560,40 +650,79 @@ const buildRowsFromDivNode = (containerNode) => {
   return rows;
 };
 
-export const scanIrToStructureMap = (irDoc, options = {}) => {
-  const dominantTable = selectDominantTableNode(irDoc);
-  if (dominantTable) {
-    const section = createStructureSection(dominantTable);
-    addScanReasons(section, ['dominant_table_root'], 0.95);
-    const rawRows = buildRowsFromTableNode(dominantTable);
-    section.rows = normalizeScannedRows(rawRows, section);
-    if (section.rows.length > 0) {
-      return {
-        sections: [section],
-        diagnostics: {
-          mode: 'dominant_table',
-          dominantTableId: dominantTable.id,
-          dominantTableTag: dominantTable.tag,
-        },
-      };
+// ---------------------------------------------------------------------------
+// Helper: resolve the node whose *direct children* should be treated as div
+// layout rows.  Handles two cases:
+//   1. The body-level node is itself a block div container (pure div-layout).
+//   2. The body-level node is a single-row/single-TD <table> wrapper that holds
+//      multiple block div rows inside its one cell (Unlayer / BEE hybrid).
+// ---------------------------------------------------------------------------
+const findDivLayoutContainer = (topNodes) => {
+  // Case 1: direct block-div container at top level
+  const directDivContainers = topNodes.filter((n) => {
+    const tag = `${n?.tag || ''}`.toLowerCase();
+    return BLOCK_DIV_TAGS.has(tag) && hasRenderableContentSignature(n);
+  });
+  if (directDivContainers.length > 0) {
+    return directDivContainers.reduce((best, c) =>
+      countRenderableDescendants(c) > countRenderableDescendants(best) ? c : best
+    );
+  }
+
+  // Case 2: outer <table> wrapper with a single row / single TD whose children
+  // are multiple block divs (Unlayer u-row-container pattern, BEE, etc.)
+  for (const node of topNodes) {
+    const tag = `${node?.tag || ''}`.toLowerCase();
+    if (tag !== 'table') continue;
+    const trs = getDirectRowNodes(node);
+    if (trs.length !== 1) continue;
+    const tds = (trs[0].children || []).filter((c) => `${c?.tag || ''}`.toLowerCase() === 'td');
+    if (tds.length !== 1) continue;
+    const tdDivChildren = (tds[0].children || []).filter((c) =>
+      BLOCK_DIV_TAGS.has(`${c?.tag || ''}`.toLowerCase()) && hasRenderableContentSignature(c)
+    );
+    if (tdDivChildren.length >= 2) {
+      // Return the single TD itself — buildRowsFromDivNode will iterate its div children
+      return tds[0];
     }
   }
 
-  // Fix 8: Div-layout walk — used when no dominant table found OR explicitly requested
+  return null;
+};
+
+export const scanIrToStructureMap = (irDoc, options = {}) => {
+  // For explicitly identified div-layout templates (Unlayer, BEE, etc.) skip the
+  // dominant-table scan entirely.  A randomly-selected inner content table would
+  // represent only a fraction of the template, producing a broken import.
+  let dominantTable = null;
+  if (!options.allowDivWalk) {
+    dominantTable = selectDominantTableNode(irDoc);
+    if (dominantTable) {
+      const section = createStructureSection(dominantTable);
+      addScanReasons(section, ['dominant_table_root'], 0.95);
+      const rawRows = buildRowsFromTableNode(dominantTable);
+      section.rows = normalizeScannedRows(rawRows, section);
+      if (section.rows.length > 0) {
+        return {
+          sections: [section],
+          diagnostics: {
+            mode: 'dominant_table',
+            dominantTableId: dominantTable.id,
+            dominantTableTag: dominantTable.tag,
+          },
+        };
+      }
+    }
+  }
+
+  // Div-layout walk — used when no dominant table found OR explicitly requested
   if (options.allowDivWalk || !dominantTable) {
-    // Find the deepest meaningful container div (body-level wrapper)
     const topNodes = irDoc?.nodes || [];
-    const containerCandidates = topNodes.filter((n) => {
-      const tag = `${n?.tag || ''}`.toLowerCase();
-      return BLOCK_DIV_TAGS.has(tag) && hasRenderableContentSignature(n);
-    });
+    // Find the container whose children we should iterate as layout rows.
+    // This now also handles Unlayer-style outer <table> wrappers.
+    const container = findDivLayoutContainer(topNodes);
 
-    if (containerCandidates.length > 0) {
-      // Pick the candidate with the most renderable descendants
-      const container = containerCandidates.reduce((best, c) =>
-        countRenderableDescendants(c) > countRenderableDescendants(best) ? c : best
-      );
-
+    if (container) {
       const divRows = buildRowsFromDivNode(container);
       if (divRows.length > 0) {
         const section = createStructureSection(container);

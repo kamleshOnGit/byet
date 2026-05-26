@@ -152,15 +152,39 @@ const hasRenderableImportedContent = (sections = []) =>
   countImportedComponents(sections).count > 0;
 
 // ---------------------------------------------------------------------------
-// Fix 8: Div-layout detection — determine if the template is div-based
-// (no meaningful <table> elements) so we can apply a different scan strategy.
+// Fix 8 (enhanced): Div-layout detection — identify templates whose primary
+// layout structure is div-based so the div-walk scanner is used instead of
+// the dominant-table heuristic.
+//
+// Detects two cases:
+//  a) Well-known email-builder class markers (Unlayer u-row-container / u-col,
+//     BEE bee-row / bee-column, Chamaileon cm-block, etc.)
+//  b) Structurally: no <table> at all, or divs vastly outnumber tables and
+//     there are very few tables (pure CSS-grid / flexbox templates).
+//
+// NOTE: Hybrid templates (outer <table> wrapper + div rows inside) are
+// detected via the class markers — the simple ratio test is kept only as a
+// fallback for truly table-free layouts.
 // ---------------------------------------------------------------------------
 const isDivBasedTemplate = (htmlText = '') => {
+  // Class-based markers for popular div-layout email builders
+  const DIV_LAYOUT_CLASS_PATTERNS = [
+    /class="[^"]*\bu-row-container\b[^"]*"/,  // Unlayer
+    /class="[^"]*\bu-row\b[^"]*"/,            // Unlayer
+    /class="[^"]*\bu-col\b[^"]*"/,            // Unlayer
+    /class="[^"]*\bbee-row\b[^"]*"/,          // BEE Free
+    /class="[^"]*\bbee-col\b[^"]*"/,          // BEE Free
+    /class="[^"]*\bbee-block\b[^"]*"/,        // BEE Free
+    /class="[^"]*\bcm-block\b[^"]*"/,         // Chamaileon
+    /class="[^"]*\bstripo-row\b[^"]*"/,       // Stripo div variant
+    /class="[^"]*\bemail-row-container\b[^"]*"/, // generic
+  ];
+  if (DIV_LAYOUT_CLASS_PATTERNS.some((re) => re.test(htmlText))) return true;
+
+  // Structural fallback: no tables or divs vastly outnumber tables
   const lower = htmlText.toLowerCase();
-  // Count table occurrences and div occurrences
   const tableMatches = (lower.match(/<table\b/g) || []).length;
   const divMatches = (lower.match(/<div\b/g) || []).length;
-  // If no tables at all, or divs vastly outnumber tables (modern CSS layout)
   return tableMatches === 0 || (divMatches > 0 && tableMatches < 2 && divMatches > tableMatches * 3);
 };
 

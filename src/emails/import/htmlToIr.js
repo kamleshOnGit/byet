@@ -552,22 +552,30 @@ const nodeFromDom = (node, ctx) => {
 // ---------------------------------------------------------------------------
 // Fix 2: Upgraded MSO / VML / Office namespace cleaner.
 // Handles all known Outlook-specific constructs that leak ghost DOM nodes:
-//   <!--[if mso]>…<![endif]-->   downlevel-hidden IE/MSO conditionals
-//   <![if !mso]>…<![endif]>      downlevel-revealed conditionals
-//   <v:…>                        VML elements (v: namespace)
-//   <o:p>, <o:v>, <o:…>          Office namespace elements (o: namespace)
-//   xmlns:o / xmlns:v            Namespace declarations (benign but noisy)
-//   mso-* inline style values    Left in-place (they are ignored by DOMParser)
+//   <!--[if mso]>…<![endif]-->   downlevel-hidden IE/MSO conditionals (STRIP)
+//   <!--[if !mso]><!--><content><!--<![endif]-->  downlevel-revealed (KEEP — real content)
+//   <![if !mso]>…<![endif]>      old downlevel-revealed shorthand (KEEP)
+//   <v:…>                        VML elements (v: namespace) (STRIP)
+//   <o:p>, <o:v>, <o:…>          Office namespace elements (STRIP)
+//   xmlns:o / xmlns:v            Namespace declarations (STRIP — benign but noisy)
+//   mso-* inline style values    Left in-place (ignored by DOMParser)
+//
+// IMPORTANT: Only POSITIVE conditions are stripped (mso, gte mso, IE).
+//   Negative conditions (<!--[if !mso]>, <!--[if !IE]>) are "downlevel-revealed"
+//   wrappers: the comment closes immediately after the condition so the inner
+//   content IS visible to all browsers.  Stripping them would delete real content.
 // ---------------------------------------------------------------------------
 const stripMsoConditionals = (html) => {
   if (!html) return html;
   let result = String(html);
 
   // 1. Remove MSO downlevel-hidden conditional blocks: <!--[if mso]>…<![endif]-->
-  //    Use a two-pass approach: greedy first, then leftover fragments.
-  result = result.replace(/<!--\[if\b[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, '');
-  // Leftover opening tags that weren't closed (malformed)
-  result = result.replace(/<!--\[if\b[^\]]*\]>[\s\S]*?$/gi, '');
+  //    Negative lookahead (?!\s*!) ensures we only strip POSITIVE conditions.
+  //    Conditions starting with ! (e.g. !mso, !IE) are downlevel-revealed and
+  //    contain real body content — leave them untouched.
+  result = result.replace(/<!--\[if(?!\s*!)[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, '');
+  // Leftover opening tags that weren't closed (malformed) — positive conditions only
+  result = result.replace(/<!--\[if(?!\s*!)[^\]]*\]>[\s\S]*?$/gi, '');
 
   // 2. Remove downlevel-revealed conditionals: <![if !mso]>…<![endif]>
   result = result.replace(/<!\[if\b[^\]]*\]>[\s\S]*?<!\[endif\]>/gi, '');
