@@ -574,6 +574,11 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                 backgroundSize: component.settings?.backgroundSize || undefined,
                 backgroundPosition: component.settings?.backgroundPosition || undefined,
                 backgroundRepeat: component.settings?.backgroundRepeat || undefined,
+                maxWidth: component.settings?.maxWidth || undefined,
+                display: component.settings?.display || undefined,
+                float: component.settings?.float || undefined,
+                marginLeft: component.settings?.marginLeft || undefined,
+                marginRight: component.settings?.marginRight || undefined,
               }}
             >
               <Box as="tbody">

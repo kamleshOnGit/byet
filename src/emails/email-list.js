@@ -235,6 +235,19 @@ const ownWidth = (el) => {
   const width = el?.getAttribute?.('width') || styleValue(el, 'width') || '';
   return width && /^\d+$/.test(width) ? `${width}px` : width;
 };
+const tableLayoutSettings = (el) => {
+  const align = `${el?.getAttribute?.('align') || ''}`.toLowerCase();
+  const cssFloat = styleValue(el, 'float') || (align === 'left' || align === 'right' ? align : '');
+  const width = ownWidth(el) || styleValue(el, 'max-width') || '';
+  return compactSettings({
+    width: width || '100%',
+    maxWidth: styleValue(el, 'max-width') || undefined,
+    display: styleValue(el, 'display') || undefined,
+    float: cssFloat || undefined,
+    marginLeft: align === 'center' ? 'auto' : undefined,
+    marginRight: align === 'center' ? 'auto' : undefined,
+  });
+};
 const isHiddenDomNode = (el) => {
   const style = `${el?.getAttribute?.('style') || ''}`.toLowerCase();
   const cls = `${el?.getAttribute?.('class') || ''}`.toLowerCase();
@@ -349,14 +362,12 @@ const domTableToComponent = (tableEl, assetBaseUrl = '') => {
     content: '',
     importedDomTree: true,
     settings: compactSettings({
+      ...tableLayoutSettings(tableEl),
       backgroundColor: ownBgColor(tableEl),
       backgroundImage: ownBgImage(tableEl, assetBaseUrl),
       backgroundSize: styleValue(tableEl, 'background-size') || undefined,
       backgroundPosition: styleValue(tableEl, 'background-position') || undefined,
       backgroundRepeat: styleValue(tableEl, 'background-repeat') || undefined,
-      width: ownWidth(tableEl) || '100%',
-      display: styleValue(tableEl, 'display') || undefined,
-      float: styleValue(tableEl, 'float') || undefined,
       borderCollapse: styleValue(tableEl, 'border-collapse') || 'collapse',
       cellSpacing: tableEl.getAttribute('cellspacing') || '0',
       cellPadding: tableEl.getAttribute('cellpadding') || '0',

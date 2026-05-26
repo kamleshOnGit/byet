@@ -189,6 +189,8 @@ const CreateTemplate = () => {
       const parts = [];
       if (includeDisplay && s.display) parts.push(`display:${s.display};`);
       if (includeFloat && s.float) parts.push(`float:${s.float};`);
+      if (s.marginLeft) parts.push(`margin-left:${normalizeCssValue(s.marginLeft)};`);
+      if (s.marginRight) parts.push(`margin-right:${normalizeCssValue(s.marginRight)};`);
       if (includeFlex && s.alignSelf) parts.push(`align-self:${s.alignSelf};`);
       if (includeFlex && s.justifyContent) parts.push(`justify-content:${s.justifyContent};`);
       if (includeFlex && s.alignItems) parts.push(`align-items:${s.alignItems};`);
