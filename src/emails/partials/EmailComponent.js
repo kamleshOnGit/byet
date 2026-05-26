@@ -548,14 +548,23 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
         );
       case COMPONENT_TYPES.TABLE:
         return (
-          <Box onClick={handleSelect} p={4} border="1px dashed" borderColor="purple.300" borderRadius="md" style={componentStyles}>
+          <Box
+            onClick={handleSelect}
+            p={component.importedDomTree ? 0 : 4}
+            border={component.importedDomTree ? 'none' : '1px dashed'}
+            borderColor={component.importedDomTree ? undefined : 'purple.300'}
+            borderRadius={component.importedDomTree ? 0 : 'md'}
+            style={componentStyles}
+          >
+            {!component.importedDomTree && (
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
               <Box as="span" style={{ color: '#805AD5', fontWeight: 'bold' }}>▦ Table</Box>
               {isSelected && (
                 <IconButton aria-label="Add table row" size="xs" colorScheme="purple" icon={<AddIcon />} onClick={(e) => { e.stopPropagation(); addTableRow(component.id); }} />
               )}
             </Box>
-            <Box as="table" width="100%" borderCollapse="collapse">
+            )}
+            <Box as="table" width={component.settings?.width || '100%'} borderCollapse={component.settings?.borderCollapse || 'collapse'}>
               <Box as="tbody">
                 {(component.tableRows || []).map((tableRow) => (
                   <Box
@@ -580,9 +589,9 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                           onSelect?.({ kind: 'tableCell', id: cell.id, tableComponentId: component.id, tableRowId: tableRow.id, data: cell });
                         }}
                         width={cell.settings?.width || cell.width || `${Math.floor(100 / ((tableRow.cells || []).length || 1))}%`}
-                        p={2}
-                        border={cell.settings?.border && cell.settings?.border !== 'none' && cell.settings?.borderWidth ? `${cell.settings.borderWidth}px ${cell.settings.border} ${cell.settings.borderColor || '#000000'}` : '1px solid'}
-                        borderColor={cell.settings?.border && cell.settings?.border !== 'none' && cell.settings?.borderWidth ? undefined : 'purple.100'}
+                        p={component.importedDomTree ? 0 : 2}
+                        border={component.importedDomTree ? 'none' : (cell.settings?.border && cell.settings?.border !== 'none' && cell.settings?.borderWidth ? `${cell.settings.borderWidth}px ${cell.settings.border} ${cell.settings.borderColor || '#000000'}` : '1px solid')}
+                        borderColor={component.importedDomTree ? undefined : (cell.settings?.border && cell.settings?.border !== 'none' && cell.settings?.borderWidth ? undefined : 'purple.100')}
                         verticalAlign={cell.settings?.verticalAlign || 'top'}
                         colSpan={cell.colSpan || 1}
                         rowSpan={cell.rowSpan || 1}
@@ -595,6 +604,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                         fontFamily={cell.settings?.fontFamily || undefined}
                         height={cell.settings?.height || undefined}
                         minHeight={cell.settings?.minHeight || undefined}
+                        padding={cell.settings?.padding ? `${cell.settings.padding.top || 0}px ${cell.settings.padding.right || 0}px ${cell.settings.padding.bottom || 0}px ${cell.settings.padding.left || 0}px` : undefined}
                       >
                         {selectedTarget?.kind === 'tableCell' && selectedTarget?.id === cell.id && (tableRow.cells || []).length > 1 && (
                           <IconButton

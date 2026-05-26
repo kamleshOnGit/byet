@@ -5,6 +5,7 @@ import { AddIcon, EditIcon } from '@chakra-ui/icons';
 import { parseHtmlToSections } from './utils/htmlParser';
 import { htmlToIr } from './import/htmlToIr';
 import { irToSections, scanIrToStructureMap } from './ir/irToSections';
+import { COMPONENT_TYPES } from './partials/componentTypes';
 
 // ---------------------------------------------------------------------------
 // Asset inlining — converts local relative image src values to data: URIs so
@@ -188,6 +189,164 @@ const isDivBasedTemplate = (htmlText = '') => {
   return tableMatches === 0 || (divMatches > 0 && tableMatches < 2 && divMatches > tableMatches * 3);
 };
 
+let importedDomIdCounter = 0;
+const createImportedDomId = () => Date.now() + (++importedDomIdCounter);
+
+const styleValue = (el, prop) => el?.style?.getPropertyValue?.(prop) || '';
+const ownBgColor = (el) => styleValue(el, 'background-color') || el?.getAttribute?.('bgcolor') || 'transparent';
+const ownWidth = (el) => {
+  const width = el?.getAttribute?.('width') || styleValue(el, 'width') || '';
+  return width && /^\d+$/.test(width) ? `${width}px` : width;
+};
+const boxFromPadding = (el) => ({
+  top: parseInt(styleValue(el, 'padding-top') || styleValue(el, 'padding') || 0, 10) || 0,
+  right: parseInt(styleValue(el, 'padding-right') || styleValue(el, 'padding') || 0, 10) || 0,
+  bottom: parseInt(styleValue(el, 'padding-bottom') || styleValue(el, 'padding') || 0, 10) || 0,
+  left: parseInt(styleValue(el, 'padding-left') || styleValue(el, 'padding') || 0, 10) || 0,
+});
+const textSettingsFromElement = (el) => ({
+  textAlign: styleValue(el, 'text-align') || el?.getAttribute?.('align') || undefined,
+  textColor: styleValue(el, 'color') || undefined,
+  fontSize: styleValue(el, 'font-size') || undefined,
+  fontWeight: styleValue(el, 'font-weight') || undefined,
+  fontFamily: styleValue(el, 'font-family') || undefined,
+  lineHeight: styleValue(el, 'line-height') || undefined,
+});
+const compactSettings = (settings) => Object.fromEntries(Object.entries(settings).filter(([, value]) => value !== undefined && value !== ''));
+
+const isComplexStripoTemplate = (htmlText = '') => {
+  const lower = `${htmlText}`.toLowerCase();
+  if (!/\bes-(wrapper|content|header|footer|content-body|header-body|footer-body)\b/.test(lower)) return false;
+  const sectionBodyCount = (lower.match(/\bes-(content|header|footer)-body\b/g) || []).length;
+  const backgroundImageCount = (lower.match(/background-image\s*:|<[^>]+\sbackground=/g) || []).length;
+  const tableCount = (lower.match(/<table\b/g) || []).length;
+  return backgroundImageCount > 0 || sectionBodyCount >= 8 || tableCount >= 90;
+};
+
+const domNodeToComponents = (node, assetBaseUrl = '') => {
+  if (!node) return [];
+  if (node.nodeType === Node.TEXT_NODE) {
+    const text = `${node.textContent || ''}`.replace(/\s+/g, ' ').trim();
+    return text ? [{
+      id: createImportedDomId(),
+      type: COMPONENT_TYPES.SPAN,
+      content: text,
+      settings: {},
+    }] : [];
+  }
+  if (node.nodeType !== Node.ELEMENT_NODE) return [];
+
+  const tag = `${node.tagName || ''}`.toLowerCase();
+  if (['style', 'script', 'meta', 'title', 'link'].includes(tag)) return [];
+  if (tag === 'table') return [domTableToComponent(node, assetBaseUrl)];
+  if (tag === 'img') {
+    return [{
+      id: createImportedDomId(),
+      type: COMPONENT_TYPES.IMAGE,
+      content: node.getAttribute('alt') || '',
+      imageUrl: normalizeImportedUrl(node.getAttribute('src') || '', assetBaseUrl),
+      settings: compactSettings({
+        ...textSettingsFromElement(node),
+        width: ownWidth(node) || styleValue(node, 'max-width') || undefined,
+        height: node.getAttribute('height') || styleValue(node, 'height') || undefined,
+        backgroundColor: ownBgColor(node),
+        padding: boxFromPadding(node),
+      }),
+    }];
+  }
+
+  const text = Array.from(node.childNodes || []).every((child) => child.nodeType === Node.TEXT_NODE)
+    ? `${node.textContent || ''}`.replace(/\s+/g, ' ').trim()
+    : '';
+  if (text) {
+    const isHeading = /^h[1-3]$/.test(tag);
+    return [{
+      id: createImportedDomId(),
+      type: isHeading ? COMPONENT_TYPES.HEADING : COMPONENT_TYPES.SPAN,
+      content: text,
+      linkUrl: tag === 'a' ? normalizeImportedUrl(node.getAttribute('href') || '', assetBaseUrl) : '',
+      settings: compactSettings({
+        ...textSettingsFromElement(node),
+        backgroundColor: ownBgColor(node),
+        padding: boxFromPadding(node),
+        width: ownWidth(node) || undefined,
+      }),
+    }];
+  }
+
+  return Array.from(node.childNodes || []).flatMap((child) => domNodeToComponents(child, assetBaseUrl));
+};
+
+const domTableToComponent = (tableEl, assetBaseUrl = '') => {
+  const directRows = Array.from(tableEl.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tfoot > tr, :scope > tr'));
+  return {
+    id: createImportedDomId(),
+    type: COMPONENT_TYPES.TABLE,
+    content: '',
+    importedDomTree: true,
+    settings: compactSettings({
+      backgroundColor: ownBgColor(tableEl),
+      width: ownWidth(tableEl) || '100%',
+      borderCollapse: styleValue(tableEl, 'border-collapse') || 'collapse',
+      cellSpacing: tableEl.getAttribute('cellspacing') || '0',
+      cellPadding: tableEl.getAttribute('cellpadding') || '0',
+      padding: boxFromPadding(tableEl),
+    }),
+    tableRows: directRows.map((tr) => ({
+      id: createImportedDomId(),
+      settings: compactSettings({
+        backgroundColor: ownBgColor(tr),
+        height: tr.getAttribute('height') || styleValue(tr, 'height') || undefined,
+        ...textSettingsFromElement(tr),
+      }),
+      cells: Array.from(tr.children || [])
+        .filter((cell) => ['td', 'th'].includes(`${cell.tagName || ''}`.toLowerCase()))
+        .map((cell) => ({
+          id: createImportedDomId(),
+          width: ownWidth(cell) || undefined,
+          colSpan: parseInt(cell.getAttribute('colspan') || '1', 10) || 1,
+          rowSpan: parseInt(cell.getAttribute('rowspan') || '1', 10) || 1,
+          settings: compactSettings({
+            ...textSettingsFromElement(cell),
+            backgroundColor: ownBgColor(cell),
+            verticalAlign: styleValue(cell, 'vertical-align') || cell.getAttribute('valign') || 'top',
+            width: ownWidth(cell) || undefined,
+            height: cell.getAttribute('height') || styleValue(cell, 'height') || undefined,
+            padding: boxFromPadding(cell),
+          }),
+          components: Array.from(cell.childNodes || []).flatMap((child) => domNodeToComponents(child, assetBaseUrl)),
+        })),
+    })).filter((row) => row.cells.length > 0),
+  };
+};
+
+const buildDomTreeImport = (htmlText = '', assetBaseUrl = '') => {
+  importedDomIdCounter = 0;
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlText || '', 'text/html');
+  const sectionTables = Array.from(doc.querySelectorAll('table.es-header-body, table.es-content-body, table.es-footer-body'));
+  const tables = sectionTables.length > 0 ? sectionTables : Array.from(doc.body?.querySelectorAll?.('table') || []).slice(0, 1);
+  const now = createImportedDomId();
+
+  return [{
+    id: now,
+    settings: { backgroundColor: 'transparent', padding: { top: 0, right: 0, bottom: 0, left: 0 } },
+    rows: tables.map((tableEl) => ({
+      id: createImportedDomId(),
+      settings: compactSettings({
+        backgroundColor: ownBgColor(tableEl),
+        padding: { top: 0, right: 0, bottom: 0, left: 0 },
+      }),
+      columns: [{
+        id: createImportedDomId(),
+        size: 12,
+        settings: { backgroundColor: 'transparent', padding: { top: 0, right: 0, bottom: 0, left: 0 } },
+        components: [domTableToComponent(tableEl, assetBaseUrl)],
+      }],
+    })),
+  }];
+};
+
 const EmailList = () => {
   const navigate = useNavigate();
   const fileRef = useRef(null);
@@ -232,6 +391,7 @@ const EmailList = () => {
 
       // Fall back: try to resolve a base URL from saved-from comment
       const assetBaseUrl = getSavedFromBaseUrl(text);
+      const complexStripo = isComplexStripoTemplate(text);
 
       // Fix 8: choose parsing strategy based on template structure
       const divBased = isDivBasedTemplate(text);
@@ -277,7 +437,10 @@ const EmailList = () => {
 
       let importedSections;
       let chosenParser;
-      if (irQuality.score >= legacyQuality.score && irQuality.count > 0) {
+      if (complexStripo) {
+        importedSections = normalizeImportedSectionsUrls(buildDomTreeImport(text, assetBaseUrl), assetBaseUrl);
+        chosenParser = 'dom-tree';
+      } else if (irQuality.score >= legacyQuality.score && irQuality.count > 0) {
         importedSections = normalizeImportedSectionsUrls(mappedIrSections, assetBaseUrl);
         chosenParser = 'ir';
       } else if (legacyQuality.count > 0) {
