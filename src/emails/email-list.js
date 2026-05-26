@@ -79,6 +79,31 @@ const normalizeImportedUrl = (value, assetBaseUrl) => {
   }
 };
 
+const normalizeImportedComponentUrls = (component = {}, assetBaseUrl = '') => ({
+  ...component,
+  imageUrl: normalizeImportedUrl(component?.imageUrl || '', assetBaseUrl),
+  linkUrl: normalizeImportedUrl(component?.linkUrl || '', assetBaseUrl),
+  settings: {
+    ...(component?.settings || {}),
+    backgroundImage: normalizeImportedUrl(component?.settings?.backgroundImage || '', assetBaseUrl),
+  },
+  tableRows: (component?.tableRows || []).map((tableRow) => ({
+    ...tableRow,
+    settings: {
+      ...(tableRow?.settings || {}),
+      backgroundImage: normalizeImportedUrl(tableRow?.settings?.backgroundImage || '', assetBaseUrl),
+    },
+    cells: (tableRow?.cells || []).map((cell) => ({
+      ...cell,
+      settings: {
+        ...(cell?.settings || {}),
+        backgroundImage: normalizeImportedUrl(cell?.settings?.backgroundImage || '', assetBaseUrl),
+      },
+      components: (cell?.components || []).map((nested) => normalizeImportedComponentUrls(nested, assetBaseUrl)),
+    })),
+  })),
+});
+
 const normalizeImportedSectionsUrls = (sections = [], assetBaseUrl = '') =>
   sections.map((section) => ({
     ...section,
@@ -98,15 +123,7 @@ const normalizeImportedSectionsUrls = (sections = [], assetBaseUrl = '') =>
           ...(column?.settings || {}),
           backgroundImage: normalizeImportedUrl(column?.settings?.backgroundImage || '', assetBaseUrl),
         },
-        components: (column?.components || []).map((component) => ({
-          ...component,
-          imageUrl: normalizeImportedUrl(component?.imageUrl || '', assetBaseUrl),
-          linkUrl: normalizeImportedUrl(component?.linkUrl || '', assetBaseUrl),
-          settings: {
-            ...(component?.settings || {}),
-            backgroundImage: normalizeImportedUrl(component?.settings?.backgroundImage || '', assetBaseUrl),
-          },
-        })),
+        components: (column?.components || []).map((component) => normalizeImportedComponentUrls(component, assetBaseUrl)),
       })),
     })),
   }));
@@ -117,6 +134,17 @@ const getSavedFromBaseUrl = (htmlText = '') => {
   if (!rawUrl) return '';
   try {
     return new URL('.', rawUrl).toString();
+  } catch {
+    return '';
+  }
+};
+
+const getLocalFileBaseUrl = (htmlFile) => {
+  const rawPath = htmlFile?.path || htmlFile?.mozFullPath || '';
+  if (!rawPath) return '';
+  try {
+    const normalized = rawPath.replace(/\\/g, '/').replace(/\/[^/]*$/, '/');
+    return `file:///${normalized.replace(/^\/+/, '')}`;
   } catch {
     return '';
   }
@@ -194,9 +222,29 @@ const createImportedDomId = () => Date.now() + (++importedDomIdCounter);
 
 const styleValue = (el, prop) => el?.style?.getPropertyValue?.(prop) || '';
 const ownBgColor = (el) => styleValue(el, 'background-color') || el?.getAttribute?.('bgcolor') || 'transparent';
+const extractCssUrl = (value = '') => {
+  const match = `${value}`.match(/url\((['"]?)(.*?)\1\)/i);
+  return match?.[2] || '';
+};
+const ownBgImage = (el, assetBaseUrl = '') => {
+  const styleBg = extractCssUrl(styleValue(el, 'background-image'));
+  const attrBg = el?.getAttribute?.('background') || '';
+  return normalizeImportedUrl(styleBg || attrBg, assetBaseUrl);
+};
 const ownWidth = (el) => {
   const width = el?.getAttribute?.('width') || styleValue(el, 'width') || '';
   return width && /^\d+$/.test(width) ? `${width}px` : width;
+};
+const isHiddenDomNode = (el) => {
+  const style = `${el?.getAttribute?.('style') || ''}`.toLowerCase();
+  const cls = `${el?.getAttribute?.('class') || ''}`.toLowerCase();
+  return (
+    /display\s*:\s*none/.test(style) ||
+    /mso-hide\s*:\s*all/.test(style) ||
+    /max-height\s*:\s*0/.test(style) ||
+    /\bes-hidden\b/.test(cls) ||
+    el?.getAttribute?.('hidden') !== null
+  );
 };
 const boxFromPadding = (el) => ({
   top: parseInt(styleValue(el, 'padding-top') || styleValue(el, 'padding') || 0, 10) || 0,
@@ -223,6 +271,13 @@ const isComplexStripoTemplate = (htmlText = '') => {
   return backgroundImageCount > 0 || sectionBodyCount >= 8 || tableCount >= 90;
 };
 
+const shouldUseDomTreeImport = (htmlText = '') => {
+  const lower = `${htmlText}`.toLowerCase();
+  const tableCount = (lower.match(/<table\b/g) || []).length;
+  if (isComplexStripoTemplate(htmlText)) return true;
+  return /\becw\b/.test(lower) && /\blayout-\d+\b/.test(lower) && tableCount >= 20;
+};
+
 const domNodeToComponents = (node, assetBaseUrl = '') => {
   if (!node) return [];
   if (node.nodeType === Node.TEXT_NODE) {
@@ -238,6 +293,7 @@ const domNodeToComponents = (node, assetBaseUrl = '') => {
 
   const tag = `${node.tagName || ''}`.toLowerCase();
   if (['style', 'script', 'meta', 'title', 'link'].includes(tag)) return [];
+  if (isHiddenDomNode(node)) return [];
   if (tag === 'table') return [domTableToComponent(node, assetBaseUrl)];
   if (tag === 'img') {
     return [{
@@ -250,6 +306,10 @@ const domNodeToComponents = (node, assetBaseUrl = '') => {
         width: ownWidth(node) || styleValue(node, 'max-width') || undefined,
         height: node.getAttribute('height') || styleValue(node, 'height') || undefined,
         backgroundColor: ownBgColor(node),
+        backgroundImage: ownBgImage(node, assetBaseUrl),
+        backgroundSize: styleValue(node, 'background-size') || undefined,
+        backgroundPosition: styleValue(node, 'background-position') || undefined,
+        backgroundRepeat: styleValue(node, 'background-repeat') || undefined,
         padding: boxFromPadding(node),
       }),
     }];
@@ -268,6 +328,10 @@ const domNodeToComponents = (node, assetBaseUrl = '') => {
       settings: compactSettings({
         ...textSettingsFromElement(node),
         backgroundColor: ownBgColor(node),
+        backgroundImage: ownBgImage(node, assetBaseUrl),
+        backgroundSize: styleValue(node, 'background-size') || undefined,
+        backgroundPosition: styleValue(node, 'background-position') || undefined,
+        backgroundRepeat: styleValue(node, 'background-repeat') || undefined,
         padding: boxFromPadding(node),
         width: ownWidth(node) || undefined,
       }),
@@ -286,6 +350,10 @@ const domTableToComponent = (tableEl, assetBaseUrl = '') => {
     importedDomTree: true,
     settings: compactSettings({
       backgroundColor: ownBgColor(tableEl),
+      backgroundImage: ownBgImage(tableEl, assetBaseUrl),
+      backgroundSize: styleValue(tableEl, 'background-size') || undefined,
+      backgroundPosition: styleValue(tableEl, 'background-position') || undefined,
+      backgroundRepeat: styleValue(tableEl, 'background-repeat') || undefined,
       width: ownWidth(tableEl) || '100%',
       borderCollapse: styleValue(tableEl, 'border-collapse') || 'collapse',
       cellSpacing: tableEl.getAttribute('cellspacing') || '0',
@@ -296,6 +364,10 @@ const domTableToComponent = (tableEl, assetBaseUrl = '') => {
       id: createImportedDomId(),
       settings: compactSettings({
         backgroundColor: ownBgColor(tr),
+        backgroundImage: ownBgImage(tr, assetBaseUrl),
+        backgroundSize: styleValue(tr, 'background-size') || undefined,
+        backgroundPosition: styleValue(tr, 'background-position') || undefined,
+        backgroundRepeat: styleValue(tr, 'background-repeat') || undefined,
         height: tr.getAttribute('height') || styleValue(tr, 'height') || undefined,
         ...textSettingsFromElement(tr),
       }),
@@ -309,6 +381,10 @@ const domTableToComponent = (tableEl, assetBaseUrl = '') => {
           settings: compactSettings({
             ...textSettingsFromElement(cell),
             backgroundColor: ownBgColor(cell),
+            backgroundImage: ownBgImage(cell, assetBaseUrl),
+            backgroundSize: styleValue(cell, 'background-size') || undefined,
+            backgroundPosition: styleValue(cell, 'background-position') || undefined,
+            backgroundRepeat: styleValue(cell, 'background-repeat') || undefined,
             verticalAlign: styleValue(cell, 'vertical-align') || cell.getAttribute('valign') || 'top',
             width: ownWidth(cell) || undefined,
             height: cell.getAttribute('height') || styleValue(cell, 'height') || undefined,
@@ -324,7 +400,10 @@ const buildDomTreeImport = (htmlText = '', assetBaseUrl = '') => {
   importedDomIdCounter = 0;
   const parser = new DOMParser();
   const doc = parser.parseFromString(htmlText || '', 'text/html');
-  const sectionTables = Array.from(doc.querySelectorAll('table.es-header-body, table.es-content-body, table.es-footer-body'));
+  const stripoSectionTables = Array.from(doc.querySelectorAll('table.es-header, table.es-content, table.es-footer'));
+  const sectionTables = stripoSectionTables.length > 0
+    ? stripoSectionTables
+    : Array.from(doc.querySelectorAll('table.es-header-body, table.es-content-body, table.es-footer-body'));
   const tables = sectionTables.length > 0 ? sectionTables : Array.from(doc.body?.querySelectorAll?.('table') || []).slice(0, 1);
   const now = createImportedDomId();
 
@@ -390,8 +469,8 @@ const EmailList = () => {
       }
 
       // Fall back: try to resolve a base URL from saved-from comment
-      const assetBaseUrl = getSavedFromBaseUrl(text);
-      const complexStripo = isComplexStripoTemplate(text);
+      const assetBaseUrl = getSavedFromBaseUrl(text) || getLocalFileBaseUrl(htmlFile);
+      const domTreeImport = shouldUseDomTreeImport(text);
 
       // Fix 8: choose parsing strategy based on template structure
       const divBased = isDivBasedTemplate(text);
@@ -437,7 +516,7 @@ const EmailList = () => {
 
       let importedSections;
       let chosenParser;
-      if (complexStripo) {
+      if (domTreeImport) {
         importedSections = normalizeImportedSectionsUrls(buildDomTreeImport(text, assetBaseUrl), assetBaseUrl);
         chosenParser = 'dom-tree';
       } else if (irQuality.score >= legacyQuality.score && irQuality.count > 0) {

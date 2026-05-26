@@ -564,7 +564,18 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
               )}
             </Box>
             )}
-            <Box as="table" width={component.settings?.width || '100%'} borderCollapse={component.settings?.borderCollapse || 'collapse'}>
+            <Box
+              as="table"
+              width={component.settings?.width || '100%'}
+              borderCollapse={component.settings?.borderCollapse || 'collapse'}
+              style={{
+                backgroundColor: component.settings?.backgroundColor && component.settings.backgroundColor !== 'transparent' ? component.settings.backgroundColor : undefined,
+                backgroundImage: component.settings?.backgroundImage ? `url('${component.settings.backgroundImage}')` : undefined,
+                backgroundSize: component.settings?.backgroundSize || undefined,
+                backgroundPosition: component.settings?.backgroundPosition || undefined,
+                backgroundRepeat: component.settings?.backgroundRepeat || undefined,
+              }}
+            >
               <Box as="tbody">
                 {(component.tableRows || []).map((tableRow) => (
                   <Box
@@ -578,6 +589,10 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                       outline: selectedTarget?.kind === 'tableRow' && selectedTarget?.id === tableRow.id ? '2px solid #9f7aea' : 'none',
                       height: tableRow.settings?.height || undefined,
                       backgroundColor: tableRow.settings?.backgroundColor && tableRow.settings?.backgroundColor !== 'transparent' ? tableRow.settings.backgroundColor : undefined,
+                      backgroundImage: tableRow.settings?.backgroundImage ? `url('${tableRow.settings.backgroundImage}')` : undefined,
+                      backgroundSize: tableRow.settings?.backgroundSize || undefined,
+                      backgroundPosition: tableRow.settings?.backgroundPosition || undefined,
+                      backgroundRepeat: tableRow.settings?.backgroundRepeat || undefined,
                     }}
                   >
                     {(tableRow.cells || []).map((cell) => (
@@ -597,6 +612,10 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                         rowSpan={cell.rowSpan || 1}
                         outline={selectedTarget?.kind === 'tableCell' && selectedTarget?.id === cell.id ? '2px solid #805ad5' : undefined}
                         backgroundColor={cell.settings?.backgroundColor && cell.settings?.backgroundColor !== 'transparent' ? cell.settings.backgroundColor : undefined}
+                        backgroundImage={cell.settings?.backgroundImage ? `url('${cell.settings.backgroundImage}')` : undefined}
+                        backgroundSize={cell.settings?.backgroundSize || undefined}
+                        backgroundPosition={cell.settings?.backgroundPosition || undefined}
+                        backgroundRepeat={cell.settings?.backgroundRepeat || undefined}
                         textAlign={cell.settings?.textAlign || undefined}
                         color={cell.settings?.textColor || undefined}
                         fontSize={cell.settings?.fontSize || undefined}
