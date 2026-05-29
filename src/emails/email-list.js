@@ -911,14 +911,14 @@ const EmailList = () => {
 
         <Text fontSize="sm" color="gray.500" textAlign="center">
           Upload an HTML email template to edit and download.
-          Select the folder containing your template to load local images automatically.
+          Select your .html template. To include local images, also select them at the same time.
         </Text>
 
-        {/* Folder upload — select folder containing template + images */}
+        {/* File upload — select .html template and any local images together */}
         <input
           ref={fileRef}
           type="file"
-          webkitdirectory=""
+          accept=".html,.htm,text/html,image/*"
           multiple
           style={{ display: 'none' }}
           onChange={handleFileChange}

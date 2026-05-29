@@ -157,7 +157,7 @@ export const applyEffectiveSettings = (target, irNode) => {
     'borderWidth', 'borderColor', 'overflow', 'float', 'position',
     'top', 'right', 'bottom', 'left', 'zIndex',
   ];
-
+ 
   // Fix 5: Also block textColor / fontSize cascade when the value comes from a
   // button-like <a> ancestor.  Button text is typically white (#ffffff) — letting
   // this cascade to all child text nodes makes them invisible on a white background.
