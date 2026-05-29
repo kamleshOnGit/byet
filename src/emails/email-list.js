@@ -593,6 +593,80 @@ const sectionTableToRows = (tableEl, assetBaseUrl = '') => {
   });
 };
 
+
+/**
+ * Detect a BEE/Mailjet email template by its nl-container + row row-N structure.
+ */
+const isBeeTemplate = (doc) => {
+  return !!doc.querySelector('table.nl-container') &&
+         doc.querySelectorAll('table[class*="row row-"]').length > 0;
+};
+
+/**
+ * Convert a percentage width string (e.g. "58.333%") to a 12-grid size.
+ * Rounds to nearest integer, minimum 1.
+ */
+const pctToGridSize = (pctStr) => {
+  const val = parseFloat(pctStr);
+  if (!val || val <= 0) return null;
+  return Math.max(1, Math.round(val / 100 * 12));
+};
+
+/**
+ * Build editor rows from a BEE/Mailjet template.
+ * Each "row row-N" table becomes one editor row.
+ * Multi-column rows (row-content with multiple TDs) become multi-column editor rows.
+ */
+const beeSectionTableToRows = (doc, assetBaseUrl = '') => {
+  const rowTables = Array.from(doc.querySelectorAll('table[class*="row row-"]'));
+  return rowTables.map((rowTable) => {
+    const bgColor = rowTable.getAttribute('bgcolor') || ownBgColor(rowTable);
+    const contentTable = rowTable.querySelector('table.row-content');
+    if (!contentTable) {
+      return {
+        id: createImportedDomId(),
+        settings: compactSettings({ backgroundColor: bgColor, padding: { top: 0, right: 0, bottom: 0, left: 0 } }),
+        columns: [{
+          id: createImportedDomId(),
+          size: 12,
+          settings: { backgroundColor: 'transparent', padding: { top: 0, right: 0, bottom: 0, left: 0 } },
+          components: [domTableToComponent(rowTable, assetBaseUrl)],
+        }],
+      };
+    }
+
+    const colTDs = Array.from(contentTable.querySelectorAll(':scope > tbody > tr > td'));
+    const colCount = colTDs.length;
+
+    // Compute grid sizes from percentage widths on TDs
+    const rawSizes = colTDs.map((td) => pctToGridSize(td.getAttribute('width') || ''));
+    let sizes;
+    if (rawSizes.every(Boolean)) {
+      const total = rawSizes.reduce((a, b) => a + b, 0);
+      const diff = 12 - total;
+      rawSizes[rawSizes.length - 1] += diff;
+      sizes = rawSizes;
+    } else {
+      const base = Math.floor(12 / colCount);
+      sizes = colTDs.map((_, idx) => idx === colCount - 1 ? 12 - base * (colCount - 1) : base);
+    }
+
+    return {
+      id: createImportedDomId(),
+      settings: compactSettings({ backgroundColor: bgColor, padding: { top: 0, right: 0, bottom: 0, left: 0 } }),
+      columns: colTDs.map((td, idx) => ({
+        id: createImportedDomId(),
+        size: sizes[idx],
+        settings: compactSettings({
+          backgroundColor: ownBgColor(td),
+          padding: { top: 0, right: 0, bottom: 0, left: 0 },
+        }),
+        components: Array.from(td.childNodes || []).flatMap((child) => domNodeToComponents(child, assetBaseUrl)),
+      })),
+    };
+  });
+};
+
 const buildDomTreeImport = (htmlText = '', assetBaseUrl = '') => {
   importedDomIdCounter = 0;
   const parser = new DOMParser();
@@ -607,7 +681,7 @@ const buildDomTreeImport = (htmlText = '', assetBaseUrl = '') => {
   return [{
     id: now,
     settings: { backgroundColor: 'transparent', padding: { top: 0, right: 0, bottom: 0, left: 0 } },
-    rows: tables.flatMap((tableEl) => sectionTableToRows(tableEl, assetBaseUrl)),
+    rows: isBeeTemplate(doc) ? beeSectionTableToRows(doc, assetBaseUrl) : tables.flatMap((tableEl) => sectionTableToRows(tableEl, assetBaseUrl)),
   }];
 };
 
@@ -813,6 +887,32 @@ const EmailList = () => {
           style={{ display: 'none' }}
           onChange={handleFileChange}
         />
+        
+        {/* Folder upload for templates with local images (webkitdirectory) */}
+        <Button
+        onClick={() => folderRef.current && folderRef.current.click()}
+        leftIcon={<EditIcon />}
+        variant="outline"
+        colorScheme="blue"
+        size="lg"
+        justifyContent="flex-start"
+        h="56px"
+        isDisabled={isImporting}
+        >
+        Edit (Upload Folder)
+        </Button>
+        <Text fontSize="xs" color="gray.400" textAlign="center">
+        Use folder upload when your template has local images in a subfolder.
+        </Text>
+        <input
+        ref={folderRef}
+        type="file"
+        style={{ display: 'none' }}
+        webkitdirectory=""
+        multiple
+        onChange={handleFileChange}
+        />
+        
       </VStack>
     </Box>
   );
