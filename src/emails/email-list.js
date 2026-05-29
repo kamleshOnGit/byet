@@ -579,13 +579,13 @@ const buildDomTreeImport = (htmlText = '', assetBaseUrl = '') => {
   importedDomIdCounter = 0;
   const parser = new DOMParser();
   const doc = parser.parseFromString(htmlText || '', 'text/html');
-  const stripoSectionTables = Array.from(doc.querySelectorAll('table.es-header, table.es-content, table.es-footer'));
-  const sectionTables = stripoSectionTables.length > 0
-    ? stripoSectionTables
-    : Array.from(doc.querySelectorAll('table.es-header-body, table.es-content-body, table.es-footer-body'));
-  const tables = sectionTables.length > 0 ? sectionTables : Array.from(doc.body?.querySelectorAll?.('table') || []).slice(0, 1);
-  const now = createImportedDomId();
+  // Prefer es-*-body tables (content level) — they contain the float-pair TRs directly.
+  // The outer es-content/es-header/es-footer wrappers are one level up and break sectionTableToRows.
+  const sectionBodyTables = Array.from(doc.querySelectorAll('table.es-header-body, table.es-content-body, table.es-footer-body'));
+  const stripoWrapperTables = Array.from(doc.querySelectorAll('table.es-header, table.es-content, table.es-footer'));
+  const tables = sectionBodyTables.length > 0 ? sectionBodyTables : (stripoWrapperTables.length > 0 ? stripoWrapperTables : Array.from(doc.body?.querySelectorAll?.('table') || []).slice(0, 1));
 
+  const now = createImportedDomId();
   return [{
     id: now,
     settings: { backgroundColor: 'transparent', padding: { top: 0, right: 0, bottom: 0, left: 0 } },
