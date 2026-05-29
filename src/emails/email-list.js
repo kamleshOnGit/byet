@@ -221,7 +221,17 @@ let importedDomIdCounter = 0;
 const createImportedDomId = () => Date.now() + (++importedDomIdCounter);
 
 const styleValue = (el, prop) => el?.style?.getPropertyValue?.(prop) || '';
-const ownBgColor = (el) => styleValue(el, 'background-color') || el?.getAttribute?.('bgcolor') || 'transparent';
+const ownBgColor = (el) => {
+  const cssom = styleValue(el, 'background-color');
+  if (cssom && cssom !== 'transparent' && cssom !== 'rgba(0, 0, 0, 0)') return cssom;
+  // Parse raw style attr string for cases where DOMParser normalizes differently
+  const rawStyle = el?.getAttribute?.('style') || '';
+  const parts = rawStyle.split(';');
+  const bgPart = parts.find((p) => p.trim().toLowerCase().startsWith('background-color:'));
+  const rawBg = bgPart ? bgPart.split(':').slice(1).join(':').trim() : '';
+  if (rawBg && rawBg !== 'transparent' && rawBg !== 'rgba(0,0,0,0)') return rawBg;
+  return el?.getAttribute?.('bgcolor') || 'transparent';
+};
 const extractCssUrl = (value = '') => {
   const match = `${value}`.match(/url\((['"]?)(.*?)\1\)/i);
   return match?.[2] || '';
@@ -682,7 +692,12 @@ const beeSectionTableToRows = (doc, assetBaseUrl = '') => {
           backgroundColor: ownBgColor(td),
           padding: { top: 0, right: 0, bottom: 0, left: 0 },
         }),
-        components: Array.from(td.childNodes || []).flatMap((child) => domNodeToComponents(child, assetBaseUrl)),
+        components: (() => {
+          // Preserve BEE block content as raw HTML to avoid structural decomposition
+          const html = td.innerHTML || '';
+          if (!html.trim()) return [];
+          return [{ id: createImportedDomId(), type: COMPONENT_TYPES.HTML, importedDomTree: true, htmlContent: html, settings: {} }];
+        })(),
       })),
     });
   });
@@ -711,7 +726,6 @@ const buildDomTreeImport = (htmlText = '', assetBaseUrl = '') => {
 const EmailList = () => {
   const navigate = useNavigate();
   const fileRef = useRef(null);
-  const folderRef = useRef(null);
   const [importError, setImportError] = useState('');
   const [isImporting, setIsImporting] = useState(false);
 
@@ -835,7 +849,6 @@ const EmailList = () => {
     } finally {
       setIsImporting(false);
       if (fileRef.current) fileRef.current.value = '';
-      if (folderRef.current) folderRef.current.value = '';
     }
   };
 
@@ -898,44 +911,18 @@ const EmailList = () => {
 
         <Text fontSize="sm" color="gray.500" textAlign="center">
           Upload an HTML email template to edit and download.
-          For templates with local images, use the folder upload or ensure images are embedded.
+          Select the folder containing your template to load local images automatically.
         </Text>
 
-        {/* Single-file or multi-file (folder) upload — accepts .html + images */}
+        {/* Folder upload — select folder containing template + images */}
         <input
           ref={fileRef}
           type="file"
-          accept=".html,.htm,text/html,image/*"
+          webkitdirectory=""
           multiple
           style={{ display: 'none' }}
           onChange={handleFileChange}
         />
-        
-        {/* Folder upload for templates with local images (webkitdirectory) */}
-        <Button
-        onClick={() => folderRef.current && folderRef.current.click()}
-        leftIcon={<EditIcon />}
-        variant="outline"
-        colorScheme="blue"
-        size="lg"
-        justifyContent="flex-start"
-        h="56px"
-        isDisabled={isImporting}
-        >
-        Edit (Upload Folder)
-        </Button>
-        <Text fontSize="xs" color="gray.400" textAlign="center">
-        Use folder upload when your template has local images in a subfolder.
-        </Text>
-        <input
-        ref={folderRef}
-        type="file"
-        style={{ display: 'none' }}
-        webkitdirectory=""
-        multiple
-        onChange={handleFileChange}
-        />
-        
       </VStack>
     </Box>
   );
