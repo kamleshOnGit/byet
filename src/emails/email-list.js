@@ -542,19 +542,37 @@ const sectionTableToRows = (tableEl, assetBaseUrl = '') => {
 
     // Float-table row: split float tables into separate editable columns
     if (cells.length === 1 && cellHasFloatTables(cells[0])) {
-      const floatTables = Array.from(cells[0].querySelectorAll(':scope > table'));
+      const floatTables = Array.from(cells[0].querySelectorAll(":scope > table"));
       const colCount = floatTables.length;
-      const baseSize = Math.floor(12 / colCount);
+      // Compute proportional grid sizes from inner-TD pixel widths
+      const innerWidths = floatTables.map((ft) => {
+        const innerTD = ft.querySelector("td");
+        // Parse width from style attr using split — avoids regex backslash issues
+        const styleStr = innerTD ? (innerTD.getAttribute("style") || "") : "";
+        const widthPart = styleStr.split(";").find((p) => p.trim().toLowerCase().startsWith("width:"));
+        const styleW = widthPart ? parseInt(widthPart.split(":")[1], 10) : 0;
+        const attrW = innerTD ? parseInt(innerTD.getAttribute("width") || "0", 10) : 0;
+        return styleW || attrW || 0;
+      });
+      const totalW = innerWidths.reduce((a, b) => a + b, 0);
+      // Convert pixel ratios to 12-grid sizes; ensure they sum to 12
+      let sizes;
+      if (totalW > 0) {
+        const rawSizes = innerWidths.map((w) => Math.max(1, Math.round((w / totalW) * 12)));
+        const diff = 12 - rawSizes.reduce((a, b) => a + b, 0);
+        rawSizes[rawSizes.length - 1] += diff; // absorb rounding error in last column
+        sizes = rawSizes;
+      } else {
+        const baseSize = Math.floor(12 / colCount);
+        sizes = floatTables.map((_, idx) => idx === colCount - 1 ? 12 - baseSize * (colCount - 1) : baseSize);
+      }
       return {
         id: createImportedDomId(),
         settings: compactSettings({
           backgroundColor: ownBgColor(tr) || ownBgColor(cells[0]),
           padding: { top: 0, right: 0, bottom: 0, left: 0 },
         }),
-        columns: floatTables.map((ft, idx) => {
-          const size = idx === colCount - 1 ? 12 - baseSize * (colCount - 1) : baseSize;
-          return floatTableToColumn(ft, size, assetBaseUrl);
-        }),
+        columns: floatTables.map((ft, idx) => floatTableToColumn(ft, sizes[idx], assetBaseUrl)),
       };
     }
 
