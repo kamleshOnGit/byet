@@ -619,42 +619,63 @@ const pctToGridSize = (pctStr) => {
  */
 const beeSectionTableToRows = (doc, assetBaseUrl = '') => {
   const rowTables = Array.from(doc.querySelectorAll('table[class*="row row-"]'));
-  return rowTables.map((rowTable) => {
+  const result = [];
+
+  rowTables.forEach((rowTable) => {
     const bgColor = rowTable.getAttribute('bgcolor') || ownBgColor(rowTable);
     const contentTable = rowTable.querySelector('table.row-content');
-    if (!contentTable) {
-      return {
-        id: createImportedDomId(),
-        settings: compactSettings({ backgroundColor: bgColor, padding: { top: 0, right: 0, bottom: 0, left: 0 } }),
-        columns: [{
-          id: createImportedDomId(),
-          size: 12,
-          settings: { backgroundColor: 'transparent', padding: { top: 0, right: 0, bottom: 0, left: 0 } },
-          components: [domTableToComponent(rowTable, assetBaseUrl)],
-        }],
-      };
+    if (!contentTable) return;
+
+    let colTDs = Array.from(contentTable.querySelectorAll(':scope > tbody > tr > td'));
+
+    // If there is exactly one outer TD, check whether it contains a nested multi-column
+    // table (BEE "row row-N" with inner column layout rather than top-level TDs).
+    if (colTDs.length === 1) {
+      const singleTD = colTDs[0];
+      const directTables = Array.from(singleTD.children).filter((c) => c.tagName === 'TABLE');
+      const innerColTable = directTables.find((t) => {
+        const innerTDs = Array.from(t.querySelectorAll(':scope > tbody > tr > td'));
+        return innerTDs.length > 1;
+      });
+      if (innerColTable) {
+        colTDs = Array.from(innerColTable.querySelectorAll(':scope > tbody > tr > td'));
+      }
     }
 
-    const colTDs = Array.from(contentTable.querySelectorAll(':scope > tbody > tr > td'));
-    const colCount = colTDs.length;
+    // Skip empty spacer rows (no meaningful text or images)
+    const hasContent = colTDs.some((td) => {
+      const imgs = td.querySelectorAll('img');
+      const txt = (td.textContent || '').replace(/\s+/g, ' ').trim();
+      return imgs.length > 0 || txt.length > 2;
+    });
+    if (!hasContent) return;
 
-    // Compute grid sizes from percentage widths on TDs
-    const rawSizes = colTDs.map((td) => pctToGridSize(td.getAttribute('width') || ''));
+    // Remove pure-spacer TDs (no width attr AND no content/images) before building columns
+    const contentTDs = colTDs.filter((td) => {
+    const hasWidth = !!td.getAttribute('width');
+    const hasImg = td.querySelectorAll('img').length > 0;
+      const hasTxt = (td.textContent || "").split(" ").join("").trim().length > 0;
+    return hasWidth || hasImg || hasTxt;
+    });
+    const activeTDs = contentTDs.length > 0 ? contentTDs : colTDs;
+    const colCount = activeTDs.length;
+    
+    // Compute grid sizes from percentage widths on content TDs
+    const rawSizes = activeTDs.map((td) => pctToGridSize(td.getAttribute('width') || ''));
     let sizes;
     if (rawSizes.every(Boolean)) {
-      const total = rawSizes.reduce((a, b) => a + b, 0);
-      const diff = 12 - total;
-      rawSizes[rawSizes.length - 1] += diff;
-      sizes = rawSizes;
+    const total = rawSizes.reduce((a, b) => a + b, 0);
+    const diff = 12 - total;
+    rawSizes[rawSizes.length - 1] += diff;
+    sizes = rawSizes;
     } else {
-      const base = Math.floor(12 / colCount);
-      sizes = colTDs.map((_, idx) => idx === colCount - 1 ? 12 - base * (colCount - 1) : base);
+    const base = Math.floor(12 / colCount);
+    sizes = activeTDs.map((_, idx) => idx === colCount - 1 ? 12 - base * (colCount - 1) : base);
     }
-
-    return {
+    result.push({
       id: createImportedDomId(),
       settings: compactSettings({ backgroundColor: bgColor, padding: { top: 0, right: 0, bottom: 0, left: 0 } }),
-      columns: colTDs.map((td, idx) => ({
+      columns: activeTDs.map((td, idx) => ({
         id: createImportedDomId(),
         size: sizes[idx],
         settings: compactSettings({
@@ -663,8 +684,10 @@ const beeSectionTableToRows = (doc, assetBaseUrl = '') => {
         }),
         components: Array.from(td.childNodes || []).flatMap((child) => domNodeToComponents(child, assetBaseUrl)),
       })),
-    };
+    });
   });
+
+  return result;
 };
 
 const buildDomTreeImport = (htmlText = '', assetBaseUrl = '') => {
