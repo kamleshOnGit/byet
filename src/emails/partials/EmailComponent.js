@@ -713,6 +713,14 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
           </Box>
         );
       case COMPONENT_TYPES.HTML:
+        // Imported DOM-tree HTML blocks (float-table cells) render cleanly without border/editor UI
+        if (component.importedDomTree) {
+          return (
+            <Box onClick={handleSelect} p={0} border='none' style={{ display: 'block', overflow: 'hidden' }}>
+              <Box dangerouslySetInnerHTML={{ __html: component.htmlContent || '' }} />
+            </Box>
+          );
+        }
         return (
           <Box onClick={handleSelect} p={4} border="1px dashed" borderColor="orange.300" borderRadius="md" style={componentStyles}>
             <Box dangerouslySetInnerHTML={{ __html: component.htmlContent || '<div>Custom HTML content</div>' }} />

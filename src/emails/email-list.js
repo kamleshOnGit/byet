@@ -354,6 +354,41 @@ const domNodeToComponents = (node, assetBaseUrl = '') => {
   return Array.from(node.childNodes || []).flatMap((child) => domNodeToComponents(child, assetBaseUrl));
 };
 
+
+/**
+ * Detect whether a TD/TH cell contains multiple sibling float tables
+ * (Stripo es-left / es-right two-column product card pattern).
+ * Float is ignored by flex containers, so these cells must be rendered
+ * as a single raw-HTML block component to preserve their side-by-side layout.
+ */
+const cellHasFloatTables = (cell) => {
+  const directTables = Array.from(cell.querySelectorAll(':scope > table'));
+  const floated = directTables.filter((t) => {
+    const cls = '' + (t.getAttribute('class') || '');
+    const styleAttr = '' + (t.getAttribute('style') || '');
+    const align = '' + (t.getAttribute('align') || '');
+    return (
+      (cls.includes('es-left') || cls.includes('es-right')) ||
+      (styleAttr.includes('float:left') || styleAttr.includes('float: left') || styleAttr.includes('float:right') || styleAttr.includes('float: right')) ||
+      align === 'left' ||
+      align === 'right'
+    );
+  });
+  return floated.length >= 2;
+};
+
+/**
+ * Serialize a cell inner HTML as a single imported-DOM HTML component
+ * wrapped in a clearfix block.
+ */
+const cellToHtmlComponent = (cell) => ({
+  id: createImportedDomId(),
+  type: COMPONENT_TYPES.HTML,
+  importedDomTree: true,
+  htmlContent: '<div style="display:block;overflow:hidden;">' + cell.innerHTML + '</div>',
+  settings: {},
+});
+
 const domTableToComponent = (tableEl, assetBaseUrl = '') => {
   const directRows = Array.from(tableEl.querySelectorAll(':scope > tbody > tr, :scope > thead > tr, :scope > tfoot > tr, :scope > tr'));
   return {
@@ -405,7 +440,12 @@ const domTableToComponent = (tableEl, assetBaseUrl = '') => {
             height: cell.getAttribute('height') || styleValue(cell, 'height') || undefined,
             padding: boxFromPadding(cell),
           }),
-          components: Array.from(cell.childNodes || []).flatMap((child) => domNodeToComponents(child, assetBaseUrl)),
+          // If the cell contains sibling float tables (Stripo two-column product cards),
+          // serialize as a single HTML block so native float layout is preserved.
+          // Flex containers ignore float on children, causing columns to stack vertically.
+          components: cellHasFloatTables(cell)
+            ? [cellToHtmlComponent(cell)]
+            : Array.from(cell.childNodes || []).flatMap((child) => domNodeToComponents(child, assetBaseUrl)),
         })),
     })).filter((row) => row.cells.length > 0),
   };
