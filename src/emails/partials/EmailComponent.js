@@ -510,25 +510,19 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                   ref={fileInputRef}
                   type="file"
                   accept="image/*"
-                  style={{ display: 'none' }}
+                  onClick={(e) => e.stopPropagation()}
                   onChange={handleImageFileChange}
-                />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
                   style={{
                     width: '100%',
                     marginTop: '4px',
-                    padding: '4px 8px',
-                    backgroundColor: '#3182ce',
-                    color: 'white',
-                    border: 'none',
+                    padding: '4px',
+                    border: '1px solid #3182ce',
                     borderRadius: '4px',
                     cursor: 'pointer',
-                    fontSize: '12px'
+                    fontSize: '12px',
+                    boxSizing: 'border-box',
                   }}
-                >
-                  Upload Local Image
-                </button>
+                />
               </>
             )}
           </Box>

@@ -163,36 +163,38 @@ const DroppableSection = ({ section, syncEditorToHtml, onSelect, selectedTarget 
 
   return (
     <Box ref={drop} style={updatedSectionStyle} position="relative">
-      {hasRenderableRows ? (
-        (section.rows || []).filter(isRenderableRow).map((row, index) => (
-          <DroppableRow
-            key={row.id}
-            row={row}
-            parentId={section.id}
-            index={index}
-            moveRow={moveRow}
-            syncEditorToHtml={syncEditorToHtml}
-            onSelect={onSelect}
-            selectedTarget={selectedTarget}
-          />
-        ))
-      ) : (
-        <Box
-          display="flex"
-          alignItems="center"
-          justifyContent="center"
-          minHeight="40px"
-          border={isOver ? '2px dashed #1890ff' : '1px dashed #d9d9d9'}
-          borderRadius="4px"
-          bg={isOver ? 'rgba(24, 144, 255, 0.1)' : 'transparent'}
-          color={isOver ? '#1890ff' : '#999'}
-          fontSize="sm"
-          p={2}
-          textAlign="center"
-        >
-          {isOver ? 'Drop row layout here' : 'Drag a row layout here or click + to add'}
-        </Box>
-      )}
+      {/* Existing rows - show all rows in editor, including empty ones */}
+      {(section.rows || []).map((row, index) => (
+        <DroppableRow
+          key={row.id}
+          row={row}
+          parentId={section.id}
+          index={index}
+          moveRow={moveRow}
+          syncEditorToHtml={syncEditorToHtml}
+          onSelect={onSelect}
+          selectedTarget={selectedTarget}
+        />
+      ))}
+      {/* Drop zone for adding new rows at the bottom */}
+      <Box
+        mt={2}
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        minHeight="40px"
+        border={isOver ? '2px dashed #1890ff' : '1px dashed #d9d9d9'}
+        borderRadius="4px"
+        bg={isOver ? 'rgba(24, 144, 255, 0.1)' : 'transparent'}
+        color={isOver ? '#1890ff' : '#999'}
+        fontSize="sm"
+        p={2}
+        textAlign="center"
+        cursor="pointer"
+        onClick={addRow}
+      >
+        {isOver ? 'Drop row layout here' : '+ Click or drag row layout here'}
+      </Box>
       <Box position="absolute" top="4px" right="4px">
         <IconButton
           onClick={addRow}

@@ -356,8 +356,26 @@ const CreateTemplate = () => {
           const minWidth = normalizeCssValue(s.minWidth, '');
           const minHeight = normalizeCssValue(s.minHeight, '');
           const maxHeight = normalizeCssValue(s.maxHeight, '');
-          const sizeStyle = `${width ? `width:${width};max-width:${width};` : `width:100%;max-width:${maxWidth || '100%'};`}${height ? `height:${height};` : 'height:auto;'}${minWidth ? `min-width:${minWidth};` : ''}${minHeight ? `min-height:${minHeight};` : ''}${maxHeight ? `max-height:${maxHeight};` : ''}display:block;${makeBorderStyle(s)}${makeRadiusStyle(s)}${makeBackgroundStyle(s)}box-sizing:border-box;`;
-          return wrap(`<img src="${escapeHtml(component.imageUrl || DUMMY_IMAGE_URL)}" alt="${escapeHtml(component.content) || ''}" style="display:block;border:0;outline:none;text-decoration:none;${sizeStyle}" />`);
+          const imageStyle = [
+            'display:block;',
+            'border:0;',
+            'outline:none;',
+            'text-decoration:none;',
+            width ? `width:${width};` : 'width:100%;',
+            width ? `max-width:${width};` : `max-width:${maxWidth || '100%'};`,
+            height ? `height:${height};` : (maxHeight || minHeight ? '' : 'height:auto;'),
+            minWidth ? `min-width:${minWidth};` : '',
+            minHeight ? `min-height:${minHeight};` : '',
+            maxHeight ? `max-height:${maxHeight};` : '',
+            height || minHeight || maxHeight ? 'object-fit:cover;' : '',
+            makeBorderStyle(s),
+            makeRadiusStyle(s),
+            makeBackgroundStyle(s),
+            'box-sizing:border-box;',
+          ].join('');
+          const widthAttr = width && /^\d+px$/.test(width) ? ` width="${Number.parseInt(width, 10)}"` : '';
+          const heightAttr = height && /^\d+px$/.test(height) ? ` height="${Number.parseInt(height, 10)}"` : '';
+          return wrap(`<img src="${escapeHtml(component.imageUrl || DUMMY_IMAGE_URL)}" alt="${escapeHtml(component.content) || ''}"${widthAttr}${heightAttr} style="${imageStyle}" />`);
         }
         case COMPONENT_TYPES.LINK:
           return wrap(`<a href="${escapeHtml(component.linkUrl || DUMMY_LINK_URL)}" style="${s.display ? `display:${s.display};` : 'display:inline-block;'}${s.float ? `float:${s.float};` : ''}${makeTextStyle({ ...s, textColor: s.linkColor || s.textColor || '#0066cc', textDecoration: s.textDecoration || 'underline' })}">${renderRichText(component.content || 'Visit our placeholder')}</a>`);

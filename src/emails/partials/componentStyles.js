@@ -10,16 +10,16 @@ export const sectionStyle = {
 };
 
 export const rowStyle = {
-  border: '1px solid transparent',
+  border: '1px dashed #d9d9d9', // Editor-only dashed border (not included in HTML export)
   borderRadius: '4px',
-  padding: '2px',
+  padding: '4px',
   marginBottom: '4px',
-  backgroundColor: 'transparent', // Let template backgrounds show through
+  backgroundColor: 'transparent',
   display: 'flex',
   flexWrap: 'nowrap',
   justifyContent: 'flex-start',
   alignItems: 'stretch',
-  minHeight: '20px',
+  minHeight: '30px',
   position: 'relative',
   boxSizing: 'border-box',
 };
@@ -28,11 +28,11 @@ export const columnParentStyle = (colSpan) => ({
   flex: `0 0 ${(colSpan / 12) * 100}%`,
   maxWidth: `${(colSpan / 12) * 100}%`,
   position: 'relative',
-  border: '1px solid transparent',
-  margin: '0px',
-  padding: '2px',
-  minHeight: '10px',
-  backgroundColor: 'transparent', // Let template backgrounds show through
+  border: '1px dashed #d0d0d0', // Editor-only dashed border (not included in HTML export)
+  margin: '2px',
+  padding: '4px',
+  minHeight: '20px',
+  backgroundColor: 'transparent',
   boxSizing: 'border-box',
   overflow: 'visible',
 });
