@@ -70,12 +70,23 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
   const removeTableCell = useEditorStore((state) => state.removeTableCell);
   const removeComponent = useEditorStore((state) => state.removeComponent);
   const updateComponentData = useEditorStore((state) => state.updateComponentData);
+  const fileInputRef = React.useRef(null);
 
   const handleChange = (nextValue) => {
     const updatedComponent = (nextValue && typeof nextValue === 'object' && nextValue.target)
       ? { ...component, content: nextValue.target.value || '' }
       : (nextValue && typeof nextValue === 'object' ? nextValue : { ...component, content: nextValue || '' });
     updateComponentData(component.id, updatedComponent);
+  };
+
+  const handleImageFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      handleChange({ ...component, imageUrl: event.target.result });
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSelect = (e) => {
@@ -487,13 +498,38 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
               }}
             />
             {isSelected && (
-              <input
-                type="text"
-                placeholder="Image URL"
-                value={component.imageUrl || ''}
-                onChange={(e) => handleChange({ ...component, imageUrl: e.target.value })}
-                style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px' }}
-              />
+              <>
+                <input
+                  type="text"
+                  placeholder="Image URL"
+                  value={component.imageUrl || ''}
+                  onChange={(e) => handleChange({ ...component, imageUrl: e.target.value })}
+                  style={{ width: '100%', border: '1px solid gray', borderRadius: '4px', padding: '4px', marginTop: '4px' }}
+                />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={handleImageFileChange}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{
+                    width: '100%',
+                    marginTop: '4px',
+                    padding: '4px 8px',
+                    backgroundColor: '#3182ce',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '12px'
+                  }}
+                >
+                  Upload Local Image
+                </button>
+              </>
             )}
           </Box>
         );

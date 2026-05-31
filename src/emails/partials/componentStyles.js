@@ -1,11 +1,12 @@
 // Updated default styling for sections, rows, and columns
 export const sectionStyle = {
-  border: '1px solid transparent',
-  borderRadius: '0px',
-  padding: '0px',
-  marginBottom: '0px',
-  backgroundColor: 'transparent', // Let template backgrounds show through
-  minHeight: '10px',
+  border: '1px dashed transparent',
+  borderRadius: '4px',
+  padding: '8px',
+  marginBottom: '8px',
+  backgroundColor: 'transparent',
+  minHeight: '60px', // Increased for better drop target
+  position: 'relative',
 };
 
 export const rowStyle = {
