@@ -395,55 +395,32 @@ const shouldPreserveContainerStructure = (el) => {
 const findLikelyContentWidth = (root) => {
   if (!root) return '600px';
 
-  // 1. Try to find the most frequent width among tables that look like main containers
-  const tables = Array.from(root.querySelectorAll?.('table') || []);
-  const widthCounts = new Map();
+  const toFixedPx = (value) => {
+    const raw = `${value || ''}`.trim();
+    if (!raw || raw.endsWith('%') || raw.toLowerCase() === 'auto') return null;
+    const match = raw.match(/(\d+(?:\.\d+)?)/);
+    if (!match) return null;
+    const px = Math.round(Number.parseFloat(match[1]));
+    return px >= 320 && px <= 900 ? px : null;
+  };
 
-  tables.forEach(table => {
-    const w = table.getAttribute?.('width') || extractStyleValue(table.getAttribute?.('style') || '', 'width');
-    if (w && !w.endsWith('%')) {
-      const px = parseInt(w, 10);
-      if (px >= 320 && px <= 900) {
-        widthCounts.set(px, (widthCounts.get(px) || 0) + 1);
-      }
-    }
-  });
+  const tableCandidates = Array.from(root.querySelectorAll?.('table') || [])
+    .map((table) => toFixedPx(table.getAttribute?.('width') || extractStyleValue(table.getAttribute?.('style') || '', 'width') || extractStyleValue(table.getAttribute?.('style') || '', 'max-width')))
+    .filter((value) => value !== null && Number.isFinite(value));
 
-  if (widthCounts.size > 0) {
-    const sorted = Array.from(widthCounts.entries()).sort((a, b) => {
-      if (b[1] !== a[1]) return b[1] - a[1];
-      return Math.abs(a[0] - 600) - Math.abs(b[0] - 600);
-    });
-    return `${sorted[0][0]}px`;
+  if (tableCandidates.length > 0) {
+    return `${Math.max(...tableCandidates)}px`;
   }
 
-  // 2. Fallback to style-based detection on other elements
-  const rawCandidates = Array.from(root.querySelectorAll?.('*') || []).map((el) => {
-    const style = el.getAttribute?.('style') || '';
-    return extractStyleValue(style, 'max-width') || extractStyleValue(style, 'width') || '';
-  });
-  
-  const candidates = rawCandidates
-    .map((value) => `${value || ''}`.trim())
-    .filter(Boolean)
-    .map((value) => {
-      if (value.endsWith('%')) return null;
-      const match = value.match(/(\d+(?:\.\d+)?)/);
-      if (!match) return null;
-      const px = Math.round(Number.parseFloat(match[1]));
-      return (px >= 320 && px <= 900) ? px : null;
+  const candidates = Array.from(root.querySelectorAll?.('*') || [])
+    .map((el) => {
+      const style = el.getAttribute?.('style') || '';
+      return toFixedPx(extractStyleValue(style, 'max-width') || extractStyleValue(style, 'width') || el.getAttribute?.('width') || '');
     })
     .filter((value) => value !== null && Number.isFinite(value));
 
-  
   if (candidates.length > 0) {
-    const counts = new Map();
-    candidates.forEach((px) => counts.set(px, (counts.get(px) || 0) + 1));
-    const sorted = Array.from(counts.entries()).sort((a, b) => {
-      if (b[1] !== a[1]) return b[1] - a[1];
-      return Math.abs(a[0] - 600) - Math.abs(b[0] - 600);
-    });
-    return `${sorted[0][0]}px`;
+    return `${Math.max(...candidates)}px`;
   }
   
   return '600px';

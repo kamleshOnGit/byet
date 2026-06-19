@@ -371,21 +371,29 @@ const domNodeToComponents = (node, assetBaseUrl = '') => {
  * Float is ignored by flex containers, so these cells must be rendered
  * as a single raw-HTML block component to preserve their side-by-side layout.
  */
-const cellHasFloatTables = (cell) => {
+const getDirectFloatTables = (cell) => {
   const directTables = Array.from(cell.querySelectorAll(':scope > table'));
-  const floated = directTables.filter((t) => {
-    const cls = '' + (t.getAttribute('class') || '');
-    const styleAttr = '' + (t.getAttribute('style') || '');
-    const align = '' + (t.getAttribute('align') || '');
-    return (
-      (cls.includes('es-left') || cls.includes('es-right')) ||
-      (styleAttr.includes('float:left') || styleAttr.includes('float: left') || styleAttr.includes('float:right') || styleAttr.includes('float: right')) ||
+  return directTables.filter((t) => {
+    const cls = `${t.getAttribute('class') || ''}`;
+    const styleAttr = `${t.getAttribute('style') || ''}`;
+    const align = `${t.getAttribute('align') || ''}`.toLowerCase();
+    const isFloated = (
+      cls.includes('es-left') ||
+      cls.includes('es-right') ||
+      styleAttr.includes('float:left') ||
+      styleAttr.includes('float: left') ||
+      styleAttr.includes('float:right') ||
+      styleAttr.includes('float: right') ||
       align === 'left' ||
       align === 'right'
     );
+    if (!isFloated || isHiddenDomNode(t)) return false;
+    const text = `${t.textContent || ''}`.replace(/\s+/g, ' ').trim();
+    return text.length > 0 || t.querySelectorAll('img').length > 0;
   });
-  return floated.length >= 2;
 };
+
+const cellHasFloatTables = (cell) => getDirectFloatTables(cell).length >= 2;
 
 /**
  * Serialize a cell inner HTML as a single imported-DOM HTML component
@@ -552,7 +560,7 @@ const sectionTableToRows = (tableEl, assetBaseUrl = '') => {
 
     // Float-table row: split float tables into separate editable columns
     if (cells.length === 1 && cellHasFloatTables(cells[0])) {
-      const floatTables = Array.from(cells[0].querySelectorAll(":scope > table"));
+      const floatTables = getDirectFloatTables(cells[0]);
       const colCount = floatTables.length;
       // Compute proportional grid sizes from inner-TD pixel widths
       const innerWidths = floatTables.map((ft) => {
@@ -564,18 +572,7 @@ const sectionTableToRows = (tableEl, assetBaseUrl = '') => {
         const attrW = innerTD ? parseInt(innerTD.getAttribute("width") || "0", 10) : 0;
         return styleW || attrW || 0;
       });
-      const totalW = innerWidths.reduce((a, b) => a + b, 0);
-      // Convert pixel ratios to 12-grid sizes; ensure they sum to 12
-      let sizes;
-      if (totalW > 0) {
-        const rawSizes = innerWidths.map((w) => Math.max(1, Math.round((w / totalW) * 12)));
-        const diff = 12 - rawSizes.reduce((a, b) => a + b, 0);
-        rawSizes[rawSizes.length - 1] += diff; // absorb rounding error in last column
-        sizes = rawSizes;
-      } else {
-        const baseSize = Math.floor(12 / colCount);
-        sizes = floatTables.map((_, idx) => idx === colCount - 1 ? 12 - baseSize * (colCount - 1) : baseSize);
-      }
+      const sizes = normalizeGridSizes(innerWidths, colCount);
       return {
         id: createImportedDomId(),
         settings: compactSettings({
@@ -620,6 +617,30 @@ const pctToGridSize = (pctStr) => {
   const val = parseFloat(pctStr);
   if (!val || val <= 0) return null;
   return Math.max(1, Math.round(val / 100 * 12));
+};
+
+const normalizeGridSizes = (weights = [], count = weights.length) => {
+  const safeCount = Math.max(1, count || 1);
+  const usableWeights = weights.slice(0, safeCount).map((value) => Number.parseFloat(value) || 0);
+  const totalWeight = usableWeights.reduce((sum, value) => sum + value, 0);
+  if (totalWeight <= 0) {
+    const base = Math.floor(12 / safeCount);
+    return Array.from({ length: safeCount }, (_, index) => index === safeCount - 1 ? 12 - base * (safeCount - 1) : base);
+  }
+  const sizes = usableWeights.map((value) => Math.max(1, Math.round((value / totalWeight) * 12)));
+  let total = sizes.reduce((sum, value) => sum + value, 0);
+  while (total > 12) {
+    const index = sizes.reduce((best, value, currentIndex) => value > sizes[best] ? currentIndex : best, 0);
+    if (sizes[index] <= 1) break;
+    sizes[index] -= 1;
+    total -= 1;
+  }
+  while (total < 12) {
+    const index = sizes.reduce((best, value, currentIndex) => value > sizes[best] ? currentIndex : best, 0);
+    sizes[index] += 1;
+    total += 1;
+  }
+  return sizes;
 };
 
 /**
@@ -672,16 +693,9 @@ const beeSectionTableToRows = (doc, assetBaseUrl = '') => {
     
     // Compute grid sizes from percentage widths on content TDs
     const rawSizes = activeTDs.map((td) => pctToGridSize(td.getAttribute('width') || ''));
-    let sizes;
-    if (rawSizes.every(Boolean)) {
-    const total = rawSizes.reduce((a, b) => a + b, 0);
-    const diff = 12 - total;
-    rawSizes[rawSizes.length - 1] += diff;
-    sizes = rawSizes;
-    } else {
-    const base = Math.floor(12 / colCount);
-    sizes = activeTDs.map((_, idx) => idx === colCount - 1 ? 12 - base * (colCount - 1) : base);
-    }
+    const sizes = rawSizes.every(Boolean)
+      ? normalizeGridSizes(rawSizes, colCount)
+      : normalizeGridSizes([], colCount);
     result.push({
       id: createImportedDomId(),
       settings: compactSettings({ backgroundColor: bgColor, padding: { top: 0, right: 0, bottom: 0, left: 0 } }),

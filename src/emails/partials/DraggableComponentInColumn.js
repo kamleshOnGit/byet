@@ -37,8 +37,9 @@ const DraggableComponentInColumn = ({ component, index, columnId, parentId, rowI
         cursor: 'grab',
         outline: isSelected ? '2px solid #3182ce' : 'none',
         boxShadow: 'none',
-        width: 'fit-content',
+        width: '100%',
         maxWidth: '100%',
+        boxSizing: 'border-box',
       }}
     >
       <EmailComponent

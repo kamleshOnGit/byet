@@ -85,7 +85,7 @@ const DroppableRow = ({ row, parentId, index, moveRow, syncEditorToHtml, onSelec
     if (s.boxSizing) {
       out.boxSizing = s.boxSizing;
     }
-    // Do NOT apply imported width/height to editor rows — rows should always
+    // Do NOT apply imported width/height/maxWidth to editor rows — rows should always
     // span full width. Explicit pixel values from HTML table attrs collapse
     // the row to a tiny size in the editor's flex layout.
     if (s.minHeight) {
@@ -133,18 +133,6 @@ const DroppableRow = ({ row, parentId, index, moveRow, syncEditorToHtml, onSelec
     }
     if (s.overflow) {
       out.overflow = s.overflow;
-    }
-    if (s.maxWidth) {
-      out.maxWidth = s.maxWidth;
-    }
-    if (s.minWidth) {
-      out.minWidth = s.minWidth;
-    }
-    if (s.maxHeight) {
-      out.maxHeight = s.maxHeight;
-    }
-    if (s.minHeight) {
-      out.minHeight = s.minHeight;
     }
     return out;
   })();

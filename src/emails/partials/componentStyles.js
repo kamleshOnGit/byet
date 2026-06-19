@@ -22,17 +22,20 @@ export const rowStyle = {
   minHeight: '30px',
   position: 'relative',
   boxSizing: 'border-box',
+  width: '100%',
 };
 
 export const columnParentStyle = (colSpan) => ({
   flex: `0 0 ${(colSpan / 12) * 100}%`,
+  width: `${(colSpan / 12) * 100}%`,
   maxWidth: `${(colSpan / 12) * 100}%`,
+  minWidth: '0',
   position: 'relative',
   border: '1px dashed #d0d0d0', // Editor-only dashed border (not included in HTML export)
-  margin: '2px',
+  margin: '0',
   padding: '4px',
   minHeight: '20px',
   backgroundColor: 'transparent',
   boxSizing: 'border-box',
-  overflow: 'visible',
+  overflow: 'hidden',
 });

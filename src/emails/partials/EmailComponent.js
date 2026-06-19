@@ -6,6 +6,31 @@ import { COMPONENT_TYPES } from './componentTypes';
 import { createComponentInstance, DUMMY_IMAGE_URL, DUMMY_LINK_URL } from './componentRegistry';
 import { useEditorStore } from '../editorStore';
 
+const TEXT_LIKE_COMPONENT_TYPES = new Set([
+  COMPONENT_TYPES.TEXT,
+  COMPONENT_TYPES.PARAGRAPH,
+  COMPONENT_TYPES.HEADING,
+  COMPONENT_TYPES.HEADER_1,
+  COMPONENT_TYPES.HEADER_2,
+  COMPONENT_TYPES.HEADER_3,
+  COMPONENT_TYPES.SPAN,
+  COMPONENT_TYPES.LINK,
+]);
+
+const getEditorCellWidth = (cell, cells, importedDomTree) => {
+  const fallback = `${Math.floor(100 / ((cells || []).length || 1))}%`;
+  if (!importedDomTree) {
+    return cell.settings?.width || cell.width || fallback;
+  }
+  const raw = `${cell.settings?.width || cell.width || ''}`.trim();
+  if (raw.endsWith('%')) {
+    return raw;
+  }
+  const totalSpan = (cells || []).reduce((sum, currentCell) => sum + Math.max(1, Number.parseInt(currentCell.colSpan || 1, 10) || 1), 0) || 1;
+  const span = Math.max(1, Number.parseInt(cell.colSpan || 1, 10) || 1);
+  return `${(span / totalSpan) * 100}%`;
+};
+
 const TableCellDropZone = ({ tableId, tableRowId, cell, parentId, rowId, columnId, onSelect, selectedTarget, cellStyle }) => {
   const addComponentToTableCell = useEditorStore((state) => state.addComponentToTableCell);
   const updateSections = useEditorStore((state) => state.updateSections);
@@ -40,7 +65,10 @@ const TableCellDropZone = ({ tableId, tableRowId, cell, parentId, rowId, columnI
         fontSize: cellSettings.fontSize || undefined,
         fontWeight: cellSettings.fontWeight || undefined,
         fontFamily: cellSettings.fontFamily || undefined,
-        lineHeight: cellSettings.lineHeight || undefined,
+        lineHeight: 1,
+        overflow: 'hidden',
+        width: '100%',
+        boxSizing: 'border-box',
       }}
     >
       {(cell.components || []).map((nestedComponent) => (
@@ -106,14 +134,16 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
   };
 
   const isSelected = selectedTarget?.kind === 'component' && selectedTarget?.id === component.id;
+  const isTextLikeComponent = TEXT_LIKE_COMPONENT_TYPES.has(type);
   const importedTableWrapperStyle = component.importedDomTree && type === COMPONENT_TYPES.TABLE
     ? {
-        width: component.settings?.width || undefined,
-        maxWidth: component.settings?.maxWidth || undefined,
-        display: component.settings?.display || (component.settings?.float ? 'block' : undefined),
-        float: component.settings?.float || undefined,
-        marginLeft: component.settings?.marginLeft || undefined,
-        marginRight: component.settings?.marginRight || undefined,
+        width: '100%',
+        maxWidth: '100%',
+        minWidth: 0,
+        display: 'block',
+        float: 'none',
+        overflow: 'hidden',
+        boxSizing: 'border-box',
       }
     : {};
 
@@ -190,7 +220,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
     if (s.textTransform) {
       styles.textTransform = s.textTransform;
     }
-    if (s.lineHeight) {
+    if (s.lineHeight && !isTextLikeComponent) {
       styles.lineHeight = s.lineHeight;
     }
     if (s.letterSpacing) {
@@ -202,16 +232,18 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
     if (s.wordBreak) {
       styles.wordBreak = s.wordBreak;
     }
-    if (s.width) {
+    // Only apply width/height if they are explicitly set and not likely to break the grid
+    // For general components in the editor, we prefer they fill their column.
+    if (s.width && (type === COMPONENT_TYPES.BUTTON || type === COMPONENT_TYPES.IMAGE)) {
       styles.width = s.width;
     }
     if (s.height) {
       styles.height = s.height;
     }
-    if (s.minWidth) {
+    if (s.minWidth && !isTextLikeComponent) {
       styles.minWidth = s.minWidth;
     }
-    if (s.maxWidth) {
+    if (s.maxWidth && (type === COMPONENT_TYPES.BUTTON || type === COMPONENT_TYPES.IMAGE)) {
       styles.maxWidth = s.maxWidth;
     }
     if (s.minHeight) {
@@ -223,10 +255,10 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
     if (s.boxSizing) {
       styles.boxSizing = s.boxSizing;
     }
-    if (s.display) {
+    if (s.display && !isTextLikeComponent && !(component.importedDomTree && type === COMPONENT_TYPES.TABLE)) {
       styles.display = s.display;
     }
-    if (s.float) {
+    if (s.float && !isTextLikeComponent && !(component.importedDomTree && type === COMPONENT_TYPES.TABLE)) {
       styles.float = s.float;
     }
     if (s.alignSelf) {
@@ -244,7 +276,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
     if (s.flexWrap) {
       styles.flexWrap = s.flexWrap;
     }
-    if (s.overflow) {
+    if (s.overflow && !isTextLikeComponent) {
       styles.overflow = s.overflow;
     }
     if (s.opacity) {
@@ -255,6 +287,16 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
     }
     if (s.listStylePosition) {
       styles.listStylePosition = s.listStylePosition;
+    }
+
+    if (isTextLikeComponent) {
+      styles.width = '100%';
+      styles.maxWidth = '100%';
+      styles.minWidth = 0;
+      styles.display = 'block';
+      styles.boxSizing = 'border-box';
+      styles.overflow = 'hidden';
+      styles.lineHeight = 1;
     }
 
     return styles;
@@ -279,7 +321,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
       color: component.settings?.textColor || 'inherit',
       textDecoration: component.settings?.textDecoration || 'inherit',
       textTransform: component.settings?.textTransform || 'inherit',
-      lineHeight: component.settings?.lineHeight || 'inherit',
+      lineHeight: 1,
       letterSpacing: component.settings?.letterSpacing || 'inherit',
       whiteSpace: component.settings?.whiteSpace || 'inherit',
       wordBreak: component.settings?.wordBreak || 'inherit',
@@ -287,7 +329,8 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
       height: component.settings?.height || undefined,
       minHeight: component.settings?.minHeight || undefined,
       maxHeight: component.settings?.maxHeight || undefined,
-      boxSizing: component.settings?.boxSizing || 'border-box',
+      boxSizing: 'border-box',
+      overflow: 'hidden',
     };
 
     const blockFillStyle = {
@@ -337,7 +380,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
         );
       case COMPONENT_TYPES.TEXT:
         return (
-          <Box as="div" onClick={handleSelect} style={componentStyles}>
+          <Box as="div" onClick={handleSelect} style={{ ...componentStyles, width: '100%', overflow: 'hidden', lineHeight: 1 }}>
             {isSelected ? (
               <input
                 type="text"
@@ -348,7 +391,10 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
             ) : (
               <Box
                 as="span"
+                display="block"
+                width="100%"
                 whiteSpace="pre-wrap"
+                style={{ overflow: 'hidden', lineHeight: 1 }}
                 onClick={handleSelect}
               >
                 {content || 'This is a text block'}
@@ -358,7 +404,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
         );
       case COMPONENT_TYPES.PARAGRAPH:
         return (
-          <Box as="p" onClick={handleSelect} style={{ margin: 0, ...componentStyles }}>
+          <Box as="p" onClick={handleSelect} style={{ margin: 0, ...componentStyles, width: '100%', overflow: 'hidden', lineHeight: 1 }}>
             {isSelected ? (
               <textarea
                 value={content || 'This is a paragraph'}
@@ -366,7 +412,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                 style={textEditorStyle}
               />
             ) : (
-              <Box as="span" whiteSpace="pre-wrap">{content || 'This is a paragraph'}</Box>
+              <Box as="span" display="block" width="100%" whiteSpace="pre-wrap" style={{ overflow: 'hidden', lineHeight: 1 }}>{content || 'This is a paragraph'}</Box>
             )}
           </Box>
         );
@@ -404,7 +450,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
         );
       case COMPONENT_TYPES.HEADER_1:
         return (
-          <Box as="h1" onClick={handleSelect} style={{ margin: 0, fontWeight: 'bold', ...componentStyles }}>
+          <Box as="h1" onClick={handleSelect} style={{ margin: 0, fontWeight: 'bold', ...componentStyles, width: '100%', overflow: 'hidden', lineHeight: 1 }}>
             {isSelected ? (
               <input
                 type="text"
@@ -415,12 +461,14 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                   fontWeight: component.settings?.fontWeight || 'bold',
                 }}
               />
-            ) : (content || 'Header 1')}
+            ) : (
+              <Box as="span" display="block" width="100%" style={{ overflow: 'hidden', lineHeight: 1 }}>{content || 'Header 1'}</Box>
+            )}
           </Box>
         );
       case COMPONENT_TYPES.HEADER_2:
         return (
-          <Box as="h2" onClick={handleSelect} style={{ margin: 0, fontWeight: 'bold', ...componentStyles }}>
+          <Box as="h2" onClick={handleSelect} style={{ margin: 0, fontWeight: 'bold', ...componentStyles, width: '100%', overflow: 'hidden', lineHeight: 1 }}>
             {isSelected ? (
               <input
                 type="text"
@@ -431,12 +479,14 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                   fontWeight: component.settings?.fontWeight || 'bold',
                 }}
               />
-            ) : (content || 'Header 2')}
+            ) : (
+              <Box as="span" display="block" width="100%" style={{ overflow: 'hidden', lineHeight: 1 }}>{content || 'Header 2'}</Box>
+            )}
           </Box>
         );
       case COMPONENT_TYPES.HEADER_3:
         return (
-          <Box as="h3" onClick={handleSelect} style={{ margin: 0, fontWeight: 'bold', ...componentStyles }}>
+          <Box as="h3" onClick={handleSelect} style={{ margin: 0, fontWeight: 'bold', ...componentStyles, width: '100%', overflow: 'hidden', lineHeight: 1 }}>
             {isSelected ? (
               <input
                 type="text"
@@ -447,7 +497,9 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                   fontWeight: component.settings?.fontWeight || 'bold',
                 }}
               />
-            ) : (content || 'Header 3')}
+            ) : (
+              <Box as="span" display="block" width="100%" style={{ overflow: 'hidden', lineHeight: 1 }}>{content || 'Header 3'}</Box>
+            )}
           </Box>
         );
       case COMPONENT_TYPES.IMAGE:
@@ -537,7 +589,9 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
               ...componentStyles,
               color: component.settings?.linkColor || component.settings?.textColor || '#0066cc',
               textDecoration: component.settings?.textDecoration || componentStyles.textDecoration || 'underline',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              overflow: 'hidden',
+              lineHeight: 1,
             }}
           >
             {isSelected ? (
@@ -550,12 +604,14 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                   color: component.settings?.linkColor || '#0066cc',
                 }}
               />
-            ) : (content || 'Visit our placeholder')}
+            ) : (
+              <Box as="span" display="block" width="100%" style={{ overflow: 'hidden', lineHeight: 1 }}>{content || 'Visit our placeholder'}</Box>
+            )}
           </Box>
         );
       case COMPONENT_TYPES.HEADING:
         return (
-          <Box as="h2" onClick={handleSelect} style={{ margin: 0, fontWeight: 'bold', ...componentStyles }}>
+          <Box as="h2" onClick={handleSelect} style={{ margin: 0, fontWeight: 'bold', ...componentStyles, width: '100%', overflow: 'hidden', lineHeight: 1 }}>
             {isSelected ? (
               <input
                 type="text"
@@ -566,7 +622,9 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                   fontWeight: component.settings?.fontWeight || 'bold',
                 }}
               />
-            ) : (content || 'This is a heading')}
+            ) : (
+              <Box as="span" display="block" width="100%" style={{ overflow: 'hidden', lineHeight: 1 }}>{content || 'This is a heading'}</Box>
+            )}
           </Box>
         );
       case COMPONENT_TYPES.HR:
@@ -606,17 +664,19 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
             )}
             <Box
               as="table"
-              width={component.settings?.width || '100%'}
-              borderCollapse={component.settings?.borderCollapse || 'collapse'}
+              width={component.importedDomTree ? '100%' : (component.settings?.width || '100%')}
               style={{
+                borderCollapse: component.settings?.borderCollapse || 'collapse',
+                tableLayout: 'fixed',
+                width: '100%',
                 backgroundColor: component.settings?.backgroundColor && component.settings.backgroundColor !== 'transparent' ? component.settings.backgroundColor : undefined,
                 backgroundImage: component.settings?.backgroundImage ? `url('${component.settings.backgroundImage}')` : undefined,
                 backgroundSize: component.settings?.backgroundSize || undefined,
                 backgroundPosition: component.settings?.backgroundPosition || undefined,
                 backgroundRepeat: component.settings?.backgroundRepeat || undefined,
-                maxWidth: component.settings?.maxWidth || undefined,
-                display: component.settings?.display || undefined,
-                float: component.settings?.float || undefined,
+                maxWidth: component.importedDomTree ? '100%' : (component.settings?.maxWidth || undefined),
+                display: component.importedDomTree ? undefined : (component.settings?.display || undefined),
+                float: component.importedDomTree ? 'none' : (component.settings?.float || undefined),
                 marginLeft: component.settings?.marginLeft || undefined,
                 marginRight: component.settings?.marginRight || undefined,
               }}
@@ -648,7 +708,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                           e.stopPropagation();
                           onSelect?.({ kind: 'tableCell', id: cell.id, tableComponentId: component.id, tableRowId: tableRow.id, data: cell });
                         }}
-                        width={cell.settings?.width || cell.width || `${Math.floor(100 / ((tableRow.cells || []).length || 1))}%`}
+                        width={getEditorCellWidth(cell, tableRow.cells || [], component.importedDomTree)}
                         p={component.importedDomTree ? 0 : 2}
                         border={component.importedDomTree ? 'none' : (cell.settings?.border && cell.settings?.border !== 'none' && cell.settings?.borderWidth ? `${cell.settings.borderWidth}px ${cell.settings.border} ${cell.settings.borderColor || '#000000'}` : '1px solid')}
                         borderColor={component.importedDomTree ? undefined : (cell.settings?.border && cell.settings?.border !== 'none' && cell.settings?.borderWidth ? undefined : 'purple.100')}
@@ -669,6 +729,14 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                         height={cell.settings?.height || undefined}
                         minHeight={cell.settings?.minHeight || undefined}
                         padding={cell.settings?.padding ? `${cell.settings.padding.top || 0}px ${cell.settings.padding.right || 0}px ${cell.settings.padding.bottom || 0}px ${cell.settings.padding.left || 0}px` : undefined}
+                        style={{
+                          width: getEditorCellWidth(cell, tableRow.cells || [], component.importedDomTree),
+                          maxWidth: getEditorCellWidth(cell, tableRow.cells || [], component.importedDomTree),
+                          minWidth: 0,
+                          boxSizing: 'border-box',
+                          overflow: 'hidden',
+                          lineHeight: 1,
+                        }}
                       >
                         {selectedTarget?.kind === 'tableCell' && selectedTarget?.id === cell.id && (tableRow.cells || []).length > 1 && (
                           <IconButton
@@ -905,14 +973,20 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
       case COMPONENT_TYPES.SPAN:
         return (
           <Box
-            as="span"
+            as="div"
             onClick={handleSelect}
             style={{
               border: isSelected ? '1px dotted #3182ce' : '1px dotted transparent',
-              display: 'inline-block',
-              ...(component.settings?.display ? { display: component.settings.display } : {}),
               transition: 'border 0.2s ease',
-              ...componentStyles
+              ...componentStyles,
+              width: '100%',
+              maxWidth: '100%',
+              minWidth: 0,
+              display: 'block',
+              overflow: 'hidden',
+              lineHeight: 1,
+              whiteSpace: 'nowrap',
+              textOverflow: 'clip',
             }}
             _hover={{ border: isSelected ? '1px dotted #3182ce' : '1px dotted rgba(0,0,0,0.2)' }}
           >
@@ -921,7 +995,7 @@ const EmailComponent = ({ component, setSections, parentId, rowId, columnId, onS
                 type="text"
                 value={content || 'Span content'}
                 onChange={handleChange}
-                style={{ ...textEditorStyle, display: 'inline-block', width: 'auto' }}
+                style={{ ...textEditorStyle, display: 'block', width: '100%' }}
               />
             ) : (content || 'Span content')}
           </Box>

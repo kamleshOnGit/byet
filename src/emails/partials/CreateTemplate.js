@@ -15,6 +15,47 @@ const safeNumber = (value, fallback) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+const cssPixelWidth = (value) => {
+  if (value === undefined || value === null || value === '') return 0;
+  const raw = `${value}`.trim().toLowerCase();
+  if (!raw || raw.includes('%') || raw === 'auto') return 0;
+  const match = raw.match(/(\d+(?:\.\d+)?)/);
+  if (!match) return 0;
+  const px = Math.round(Number.parseFloat(match[1]));
+  return px >= 240 && px <= 1200 ? px : 0;
+};
+
+const getImportedContentMaxWidth = (items = []) => {
+  let maxWidth = 0;
+  const visitComponent = (component) => {
+    if (!component) return;
+    const s = component.settings || {};
+    maxWidth = Math.max(maxWidth, cssPixelWidth(s.width), cssPixelWidth(s.maxWidth));
+    if (component.type === COMPONENT_TYPES.IMAGE) {
+      maxWidth = Math.max(maxWidth, cssPixelWidth(component.settings?.width), cssPixelWidth(component.settings?.maxWidth));
+    }
+    (component.tableRows || []).forEach((tableRow) => {
+      (tableRow.cells || []).forEach((cell) => {
+        maxWidth = Math.max(maxWidth, cssPixelWidth(cell.width), cssPixelWidth(cell.settings?.width), cssPixelWidth(cell.settings?.maxWidth));
+        (cell.components || []).forEach(visitComponent);
+      });
+    });
+  };
+  (items || []).forEach((section) => {
+    (section.rows || []).forEach((row) => {
+      (row.columns || []).forEach((column) => {
+        (column.components || []).forEach(visitComponent);
+        (column.nestedRows || []).forEach((nestedRow) => {
+          (nestedRow.columns || []).forEach((nestedColumn) => {
+            (nestedColumn.components || []).forEach(visitComponent);
+          });
+        });
+      });
+    });
+  });
+  return maxWidth;
+};
+
 // Main CreateTemplate Component
 const CreateTemplate = () => {
   const location = useLocation();
@@ -51,6 +92,7 @@ const CreateTemplate = () => {
     };
     return sizeTokenMap[raw] || raw || fallback;
   };
+
 
   useEffect(() => {
     const importedSections = location?.state?.importedSections;
@@ -93,8 +135,10 @@ const CreateTemplate = () => {
       return sizeTokenMap[raw] || raw || fallback;
     };
 
-    const containerWidthPx = safeNumber(templateSettings.containerWidth, 600);
-    const containerWidthValue = normalizeCssValue(templateSettings.containerWidth, `${containerWidthPx}px`);
+    const configuredContainerWidthPx = safeNumber(templateSettings.containerWidth, 600);
+    const importedContentWidthPx = getImportedContentMaxWidth(sections);
+    const containerWidthPx = Math.max(configuredContainerWidthPx, importedContentWidthPx || 0);
+    const containerWidthValue = `${containerWidthPx}px`;
 
     const makePaddingStyle = (padding) => {
       if (!padding) return '';
@@ -311,13 +355,13 @@ const CreateTemplate = () => {
       return `<${tagName} style="margin:0;${makeTextStyle(s)}${extraStyle}">${renderRichText(content)}</${tagName}>`;
     };
 
-    const renderComponent = (component, isNested = false) => {
+    const renderComponent = (component, isNested = false, renderContext = {}) => {
       const s = component?.settings || {};
       const wrapperStyle = [
-        makeBoxStyle(s, { includePadding: true, includeMargin: false, includeText: false, includeBackground: true, includeDimensions: true, includeDisplay: false, includeFloat: false, includeFlex: false }),
+        makeBoxStyle(s, { includePadding: true, includeMargin: false, includeText: false, includeBackground: true, includeDimensions: false, includeDisplay: false, includeFloat: false, includeFlex: false }),
         'mso-line-height-rule:exactly;',
       ].join('');
-      const safeBlockStyle = makeBoxStyle(s, { includeBackground: true, includePadding: true, includeBorder: true, includeRadius: true, includeDisplay: false, includeFloat: false, includeFlex: false });
+      const safeBlockStyle = makeBoxStyle(s, { includeBackground: true, includePadding: true, includeBorder: true, includeRadius: true, includeDimensions: false, includeDisplay: false, includeFloat: false, includeFlex: false });
       const spacerAfter = Number.isFinite(s?.margin?.bottom) ? s.margin.bottom : 0;
 
       const wrap = (inner) => isNested ? inner : `
@@ -405,13 +449,16 @@ const CreateTemplate = () => {
           const tableRows = component.tableRows || [];
           if (tableRows.length > 0) {
             const tableSettings = component.settings || {};
+            const forceFullWidthImportedTable = component.importedDomTree && !isNested && (renderContext.columnCount === 1 || Number(renderContext.columnSize) >= 12);
             const importedTableLayoutStyle = component.importedDomTree ? makeLayoutStyle(tableSettings, { includeDisplay: true, includeFloat: true, includeFlex: false }) : '';
+            const tableWidthAttr = forceFullWidthImportedTable ? '100%' : (tableSettings.width || '100%');
+            const tableWidthStyle = forceFullWidthImportedTable ? 'width:100%;max-width:100%;' : '';
             return wrap(`
-              <table role="presentation" width="${escapeHtml(tableSettings.width || '100%')}" cellspacing="${Number.parseInt(tableSettings.cellSpacing, 10) || 0}" cellpadding="${Number.parseInt(tableSettings.cellPadding, 10) || 0}" border="0" style="border-collapse:${escapeHtml(tableSettings.borderCollapse || 'collapse')};${makeBackgroundStyle(tableSettings)}${importedTableLayoutStyle}${safeBlockStyle}">
+              <table role="presentation" width="${escapeHtml(tableWidthAttr)}" cellspacing="${Number.parseInt(tableSettings.cellSpacing, 10) || 0}" cellpadding="${Number.parseInt(tableSettings.cellPadding, 10) || 0}" border="0" style="border-collapse:${escapeHtml(tableSettings.borderCollapse || 'collapse')};${tableWidthStyle}${makeBackgroundStyle(tableSettings)}${importedTableLayoutStyle}${safeBlockStyle}">
                 ${tableRows.map((tableRow) => `
                   <tr style="${tableRow.settings?.height ? `height:${escapeHtml(tableRow.settings.height)};` : ''}${makeBackgroundStyle(tableRow.settings || {})}${tableRow.settings?.textAlign ? `text-align:${escapeHtml(tableRow.settings.textAlign)};` : ''}">
                     ${(tableRow.cells || []).map((cell) => `
-                      <td colspan="${Math.max(1, Number.parseInt(cell.colSpan, 10) || 1)}" rowspan="${Math.max(1, Number.parseInt(cell.rowSpan, 10) || 1)}" style="width:${escapeHtml(cell.settings?.width || cell.width || `${Math.floor(100 / ((tableRow.cells || []).length || 1))}%`)};vertical-align:${escapeHtml(cell.settings?.verticalAlign || 'top')};${cell.settings?.padding ? `padding:${cell.settings.padding.top || 0}px ${cell.settings.padding.right || 0}px ${cell.settings.padding.bottom || 0}px ${cell.settings.padding.left || 0}px;` : `padding:${Number.parseInt(tableSettings.cellPadding, 10) || 0}px;`}${cell.settings?.border && cell.settings?.border !== 'none' && cell.settings?.borderWidth ? `border:${cell.settings.borderWidth}px ${escapeHtml(cell.settings.border)} ${escapeHtml(cell.settings.borderColor || '#000000')};` : (component.importedDomTree ? '' : 'border:1px solid #e9d8fd;')}${makeBackgroundStyle(cell.settings || {})}${makeLayoutStyle(cell.settings || {}, { includeDisplay: false, includeFloat: true, includeFlex: false })}${cell.settings?.height ? `height:${escapeHtml(cell.settings.height)};` : ''}${cell.settings?.minHeight ? `min-height:${escapeHtml(cell.settings.minHeight)};` : ''}${cell.settings?.textAlign ? `text-align:${escapeHtml(cell.settings.textAlign)};` : ''}${cell.settings?.textColor ? `color:${escapeHtml(cell.settings.textColor)};` : ''}${cell.settings?.fontSize ? `font-size:${escapeHtml(cell.settings.fontSize)};` : ''}${cell.settings?.fontWeight ? `font-weight:${escapeHtml(cell.settings.fontWeight)};` : ''}${cell.settings?.fontFamily ? `font-family:${escapeHtml(cell.settings.fontFamily)};` : ''}">
+                      <td colspan="${Math.max(1, Number.parseInt(cell.colSpan, 10) || 1)}" rowspan="${Math.max(1, Number.parseInt(cell.rowSpan, 10) || 1)}" style="width:${escapeHtml(forceFullWidthImportedTable && (tableRow.cells || []).length === 1 ? '100%' : (cell.settings?.width || cell.width || `${Math.floor(100 / ((tableRow.cells || []).length || 1))}%`))};vertical-align:${escapeHtml(cell.settings?.verticalAlign || 'top')};${cell.settings?.padding ? `padding:${cell.settings.padding.top || 0}px ${cell.settings.padding.right || 0}px ${cell.settings.padding.bottom || 0}px ${cell.settings.padding.left || 0}px;` : `padding:${Number.parseInt(tableSettings.cellPadding, 10) || 0}px;`}${cell.settings?.border && cell.settings?.border !== 'none' && cell.settings?.borderWidth ? `border:${cell.settings.borderWidth}px ${escapeHtml(cell.settings.border)} ${escapeHtml(cell.settings.borderColor || '#000000')};` : (component.importedDomTree ? '' : 'border:1px solid #e9d8fd;')}${makeBackgroundStyle(cell.settings || {})}${makeLayoutStyle(cell.settings || {}, { includeDisplay: false, includeFloat: true, includeFlex: false })}${cell.settings?.height ? `height:${escapeHtml(cell.settings.height)};` : ''}${cell.settings?.minHeight ? `min-height:${escapeHtml(cell.settings.minHeight)};` : ''}${cell.settings?.textAlign ? `text-align:${escapeHtml(cell.settings.textAlign)};` : ''}${cell.settings?.textColor ? `color:${escapeHtml(cell.settings.textColor)};` : ''}${cell.settings?.fontSize ? `font-size:${escapeHtml(cell.settings.fontSize)};` : ''}${cell.settings?.fontWeight ? `font-weight:${escapeHtml(cell.settings.fontWeight)};` : ''}${cell.settings?.fontFamily ? `font-family:${escapeHtml(cell.settings.fontFamily)};` : ''}">
                         <div style="width:100%;${cell.settings?.textAlign ? `text-align:${escapeHtml(cell.settings.textAlign)};` : ''}${cell.settings?.textColor ? `color:${escapeHtml(cell.settings.textColor)};` : ''}${cell.settings?.fontSize ? `font-size:${escapeHtml(cell.settings.fontSize)};` : ''}${cell.settings?.fontWeight ? `font-weight:${escapeHtml(cell.settings.fontWeight)};` : ''}${cell.settings?.fontFamily ? `font-family:${escapeHtml(cell.settings.fontFamily)};` : ''}${cell.settings?.lineHeight ? `line-height:${escapeHtml(cell.settings.lineHeight)};` : ''}">${(cell.components || []).map((nestedComponent) => renderComponent(nestedComponent, true)).join('') || '&nbsp;'}</div>
                       </td>
                     `).join('')}
@@ -461,12 +508,12 @@ const CreateTemplate = () => {
 
     const makeColumnTdStyle = (column) => {
       const s = column?.settings || {};
-      return `${makeBoxStyle(s, { includePadding: true, includeMargin: false, includeText: true, includeBackground: true, includeDimensions: true, includeDisplay: false, includeFloat: false, includeFlex: false })}vertical-align:top;`;
+      return `${makeBoxStyle(s, { includePadding: true, includeMargin: false, includeText: true, includeBackground: true, includeDimensions: false, includeDisplay: false, includeFloat: false, includeFlex: false })}vertical-align:top;`;
     };
 
     const makeRowCellStyle = (row) => {
       const s = row?.settings || {};
-      return `${makeBoxStyle(s, { includePadding: true, includeMargin: false, includeText: true, includeBackground: true, includeDimensions: true, includeDisplay: false, includeFloat: false, includeFlex: false })}vertical-align:top;`;
+      return `${makeBoxStyle(s, { includePadding: true, includeMargin: false, includeText: true, includeBackground: true, includeDimensions: false, includeDisplay: false, includeFloat: false, includeFlex: false })}vertical-align:top;`;
     };
 
     const bodyVisualStyle = makeBackgroundStyle({
@@ -504,7 +551,8 @@ const CreateTemplate = () => {
           <![endif]-->
           <style>
             table, td { border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
-            img { border: 0; outline: none; text-decoration: none; -ms-interpolation-mode: bicubic; }
+            img { border: 0; outline: none; text-decoration: none; -ms-interpolation-mode: bicubic; height: auto; }
+            .generated-grid img { max-width: 100%; }
             a { text-decoration: none; }
             @media only screen and (max-width: 480px) {
               .container { width: 100% !important; }
@@ -542,12 +590,13 @@ const CreateTemplate = () => {
                             const rowCellStyle = makeRowCellStyle(row);
                             const rowSpacer = Number.isFinite(row && row.settings && row.settings.margin && row.settings.margin.bottom ? row.settings.margin.bottom : NaN) ? row.settings.margin.bottom : 0;
                             const colsHtml = cols.map((column) => {
-                              const widthPct = Math.round(((column.size || 12) / 12) * 100);
+                              const widthPct = ((column.size || 12) / 12 * 100).toFixed(4);
                               const tdStyle = makeColumnTdStyle(column);
-                              const directContent = (column.components || []).map((c) => renderComponent(c)).join('');
+                              const directContent = (column.components || []).map((c) => renderComponent(c, false, { columnSize: column.size || 12, columnCount: cols.length })).join('');
                               // Recursively render nestedRows (multi-column sub-layouts)
                               const nestedContent = (column.nestedRows || []).map((nr) => renderRow(nr)).join('');
-                              return '<td class="stack-column-cell" width="' + widthPct + '%" style="width:' + widthPct + '%;max-width:' + widthPct + '%;' + tdStyle + '">' + directContent + nestedContent + '</td>';
+                              const widthAttr = Math.round(widthPct);
+                              return '<td class="stack-column-cell generated-grid" width="' + widthAttr + '%" style="width:' + widthPct + '%;' + tdStyle + '">' + directContent + nestedContent + '</td>';
                             }).join('');
                             return '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;table-layout:fixed;width:100%;"><tr><td style="' + rowCellStyle + '"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;table-layout:fixed;width:100%;"><tr>' + colsHtml + '</tr></table></td></tr></table>' + makeSpacerTable(rowSpacer);
                           };
@@ -639,7 +688,9 @@ const CreateTemplate = () => {
     padding: '24px',
   };
 
-  const containerWidthPxForEditor = safeNumber(templateSettings.containerWidth, 600);
+  const configuredContainerWidthPxForEditor = safeNumber(templateSettings.containerWidth, 600);
+  const importedContentWidthPxForEditor = getImportedContentMaxWidth(sections);
+  const containerWidthPxForEditor = Math.max(configuredContainerWidthPxForEditor, importedContentWidthPxForEditor || 0);
   const editorCanvasMaxWidth = `${Math.min(containerWidthPxForEditor + 320, 1200)}px`;
 
   const editorContainerStyle = {
@@ -699,7 +750,7 @@ const CreateTemplate = () => {
                   title="email-preview"
                   srcDoc={htmlContent}
                   sandbox="allow-same-origin"
-                  style={{ width: '100%', height: '100%', border: 'none' }}
+                  style={{ width: '100%', minWidth: 0, maxWidth: '100%', height: '100%', border: 'none', display: 'block', margin: '0 auto' }}
                 />
               </Box>
             </Box>
