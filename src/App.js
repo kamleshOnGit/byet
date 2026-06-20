@@ -20,11 +20,13 @@ function Nav() {
 }
 
 function App() {
+  const basename = process.env.PUBLIC_URL ? new URL(process.env.PUBLIC_URL, window.location.origin).pathname.replace(/\/$/, '') : '';
+
   return (
     <ChakraProvider>
       <Box>
         {/* Nav component always visible */}
-        <Router>
+        <Router basename={basename}>
           <Nav />
 
           {/* Routes control the content below the nav */}
