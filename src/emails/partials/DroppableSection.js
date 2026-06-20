@@ -8,12 +8,6 @@ import { moveRow } from './DroppableRow';
 import { COMPONENT_TYPES } from './componentTypes';
 import { useEditorStore } from '../editorStore';
 
-const isRenderableRow = (row) => {
-  if (!row) return false;
-  const columns = row.columns || [];
-  return columns.some((column) => (column.components || []).length > 0);
-};
-
 // Droppable Section Component
 const DroppableSection = ({ section, syncEditorToHtml, onSelect, selectedTarget }) => {
   const addRowToSection = useEditorStore((state) => state.addRowToSection);
@@ -151,16 +145,35 @@ const DroppableSection = ({ section, syncEditorToHtml, onSelect, selectedTarget 
     })
   });
 
+  const sectionSettingsStyle = (() => {
+    const s = section?.settings || {};
+    const out = {};
+    if (s.backgroundColor && s.backgroundColor !== 'transparent') {
+      out.backgroundColor = s.backgroundColor;
+    }
+    if (s.backgroundImage) {
+      out.backgroundImage = `url('${s.backgroundImage}')`;
+      out.backgroundSize = s.backgroundSize || 'cover';
+      out.backgroundPosition = s.backgroundPosition || 'center top';
+      out.backgroundRepeat = s.backgroundRepeat || 'no-repeat';
+    }
+    if (s.padding && typeof s.padding === 'object') {
+      const { top = 0, right = 0, bottom = 0, left = 0 } = s.padding;
+      if (top || right || bottom || left) {
+        out.padding = `${top}px ${right}px ${bottom}px ${left}px`;
+      }
+    }
+    return out;
+  })();
+
   // Update section style when row layout is being dragged over
   const updatedSectionStyle = {
     ...sectionStyle,
-    backgroundColor: isOver ? 'rgba(24, 144, 255, 0.06)' : sectionStyle.backgroundColor,
+    ...sectionSettingsStyle,
+    backgroundColor: isOver ? 'rgba(24, 144, 255, 0.06)' : (sectionSettingsStyle.backgroundColor || sectionStyle.backgroundColor),
     border: isOver ? '2px dashed #1890ff' : sectionStyle.border
   };
   
-  // Check if section has any renderable rows
-  const hasRenderableRows = (section.rows || []).some(isRenderableRow);
-
   return (
     <Box ref={drop} style={updatedSectionStyle} position="relative">
       {/* Existing rows - show all rows in editor, including empty ones */}

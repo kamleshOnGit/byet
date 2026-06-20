@@ -49,18 +49,35 @@ const buildAssetDataUrlMap = async (imageFiles = []) => {
  *   - Already-absolute file: file:///C:/…     → left as-is (no map entry)
  *   - data:/http(s)          → left untouched
  */
+const resolveAssetFromMap = (rawValue = '', assetMap = {}) => {
+  const value = `${rawValue || ''}`.trim();
+  if (!value || /^(data:|https?:|cid:|#|mailto:|tel:)/i.test(value)) return '';
+  if (assetMap[value]) return assetMap[value];
+  const normalized = value.replace(/^\.\//, '').replace(/\\/g, '/');
+  if (assetMap[normalized]) return assetMap[normalized];
+  const basename = normalized.replace(/.*\//, '');
+  return assetMap[basename] || '';
+};
+
 const patchHtmlImageSrcs = (htmlText, assetMap) => {
   if (!assetMap || Object.keys(assetMap).length === 0) return htmlText;
-  return htmlText.replace(/(<img\b[^>]*?\bsrc\s*=\s*)(["'])([^"']+)\2/gi, (match, prefix, quote, src) => {
-    // Skip already-inlined or remote assets
-    if (/^(data:|https?:|cid:|#)/i.test(src)) return match;
-    // Try exact match first
-    if (assetMap[src]) return `${prefix}${quote}${assetMap[src]}${quote}`;
-    // Try basename match (strip path prefix)
-    const basename = src.replace(/.*[/\\]/, '');
-    if (assetMap[basename]) return `${prefix}${quote}${assetMap[basename]}${quote}`;
-    return match;
+  let patched = htmlText.replace(/\b(src|background)\s*=\s*(["'])([^"']+)\2/gi, (match, attr, quote, src) => {
+    const resolved = resolveAssetFromMap(src, assetMap);
+    return resolved ? `${attr}=${quote}${resolved}${quote}` : match;
   });
+  patched = patched.replace(/\bsrcset\s*=\s*(["'])([^"']+)\1/gi, (match, quote, srcset) => {
+    const nextSrcset = `${srcset}`.split(',').map((part) => {
+      const bits = part.trim().split(/\s+/);
+      const resolved = resolveAssetFromMap(bits[0], assetMap);
+      return resolved ? [resolved, ...bits.slice(1)].join(' ') : part.trim();
+    }).join(', ');
+    return `srcset=${quote}${nextSrcset}${quote}`;
+  });
+  patched = patched.replace(/url\((['"]?)([^)'"]+)\1\)/gi, (match, quote, url) => {
+    const resolved = resolveAssetFromMap(url, assetMap);
+    return resolved ? `url(${quote || "'"}${resolved}${quote || "'"})` : match;
+  });
+  return patched;
 };
 
 // ---------------------------------------------------------------------------
@@ -222,15 +239,20 @@ const createImportedDomId = () => Date.now() + (++importedDomIdCounter);
 
 const styleValue = (el, prop) => el?.style?.getPropertyValue?.(prop) || '';
 const ownBgColor = (el) => {
+  const isVisibleBg = (value) => {
+    const raw = `${value || ''}`.trim().toLowerCase().replace(/\s+/g, '');
+    return !!raw && raw !== 'transparent' && raw !== 'rgba(0,0,0,0)';
+  };
   const cssom = styleValue(el, 'background-color');
-  if (cssom && cssom !== 'transparent' && cssom !== 'rgba(0, 0, 0, 0)') return cssom;
+  if (isVisibleBg(cssom)) return cssom;
   // Parse raw style attr string for cases where DOMParser normalizes differently
   const rawStyle = el?.getAttribute?.('style') || '';
   const parts = rawStyle.split(';');
   const bgPart = parts.find((p) => p.trim().toLowerCase().startsWith('background-color:'));
   const rawBg = bgPart ? bgPart.split(':').slice(1).join(':').trim() : '';
-  if (rawBg && rawBg !== 'transparent' && rawBg !== 'rgba(0,0,0,0)') return rawBg;
-  return el?.getAttribute?.('bgcolor') || 'transparent';
+  if (isVisibleBg(rawBg)) return rawBg;
+  const attrBg = el?.getAttribute?.('bgcolor') || '';
+  return isVisibleBg(attrBg) ? attrBg : '';
 };
 const extractCssUrl = (value = '') => {
   const match = `${value}`.match(/url\((['"]?)(.*?)\1\)/i);
@@ -297,6 +319,9 @@ const isComplexStripoTemplate = (htmlText = '') => {
 const shouldUseDomTreeImport = (htmlText = '') => {
   const lower = `${htmlText}`.toLowerCase();
   const tableCount = (lower.match(/<table\b/g) || []).length;
+  if (/\bgenerated-grid\b/.test(lower) && /\bstack-column-cell\b/.test(lower)) return true;
+  if (/\bnl-container\b/.test(lower) && /\brow-content\b/.test(lower) && /\bcolumn-\d+\b/.test(lower)) return true;
+  if (/\bu-row-container\b/.test(lower) && /\bu-row\b/.test(lower) && /\bu-col\b/.test(lower)) return true;
   if (isComplexStripoTemplate(htmlText)) return true;
   return /\becw\b/.test(lower) && /\blayout-\d+\b/.test(lower) && tableCount >= 20;
 };
@@ -460,12 +485,18 @@ const domTableToComponent = (tableEl, assetBaseUrl = '') => {
  * Build an editor column from a float table (es-left / es-right).
  * The float table stays as a fully-editable TABLE component.
  */
-const floatTableToColumn = (tableEl, colSize, assetBaseUrl = '') => ({
-  id: createImportedDomId(),
-  size: colSize,
-  settings: { backgroundColor: 'transparent', padding: { top: 0, right: 0, bottom: 0, left: 0 } },
-  components: [domTableToComponent(tableEl, assetBaseUrl)],
-});
+const floatTableToColumn = (tableEl, colSize, assetBaseUrl = '', fallbackBg = '') => {
+  const firstCell = tableEl.querySelector?.('td, th');
+  return {
+    id: createImportedDomId(),
+    size: colSize,
+    settings: {
+      backgroundColor: ownBgColor(tableEl) || ownBgColor(firstCell) || fallbackBg || 'transparent',
+      padding: { top: 0, right: 0, bottom: 0, left: 0 },
+    },
+    components: [domTableToComponent(tableEl, assetBaseUrl)],
+  };
+};
 
 /**
  * Build one TABLE component wrapping a single TR from a section table.
@@ -573,13 +604,14 @@ const sectionTableToRows = (tableEl, assetBaseUrl = '') => {
         return styleW || attrW || 0;
       });
       const sizes = normalizeGridSizes(innerWidths, colCount);
+      const rowBackgroundColor = ownBgColor(tr) || ownBgColor(cells[0]);
       return {
         id: createImportedDomId(),
         settings: compactSettings({
-          backgroundColor: ownBgColor(tr) || ownBgColor(cells[0]),
+          backgroundColor: rowBackgroundColor || 'transparent',
           padding: { top: 0, right: 0, bottom: 0, left: 0 },
         }),
-        columns: floatTables.map((ft, idx) => floatTableToColumn(ft, sizes[idx], assetBaseUrl)),
+        columns: floatTables.map((ft, idx) => floatTableToColumn(ft, sizes[idx], assetBaseUrl, rowBackgroundColor)),
       };
     }
 
@@ -643,6 +675,105 @@ const normalizeGridSizes = (weights = [], count = weights.length) => {
   return sizes;
 };
 
+const firstMeaningfulElement = (root, selector) => root?.querySelector?.(selector) || null;
+
+const beeTextFrom = (el) => `${el?.textContent || ''}`.replace(/\s+/g, ' ').trim();
+
+const beeEditableComponentFromBlock = (blockEl, assetBaseUrl = '') => {
+  const cls = `${blockEl?.getAttribute?.('class') || ''}`;
+  if (!blockEl || isHiddenDomNode(blockEl)) return [];
+
+  if (/\bspacer_block\b/.test(cls)) {
+    const height = parseInt(styleValue(blockEl, 'height') || styleValue(blockEl, 'line-height') || '0', 10) || 0;
+    return height > 0 ? [{ id: createImportedDomId(), type: COMPONENT_TYPES.SPACE, height, content: '', settings: { height: `${height}px` } }] : [];
+  }
+
+  const img = firstMeaningfulElement(blockEl, 'img');
+  if (img && /\bimage_block\b|\bicons_block\b/.test(cls)) {
+    const pad = img.closest?.('td.pad') || blockEl;
+    return [{
+      id: createImportedDomId(),
+      type: COMPONENT_TYPES.IMAGE,
+      content: img.getAttribute('alt') || img.getAttribute('title') || '',
+      imageUrl: normalizeImportedUrl(img.getAttribute('src') || '', assetBaseUrl),
+      linkUrl: normalizeImportedUrl(img.closest?.('a')?.getAttribute?.('href') || '', assetBaseUrl),
+      settings: compactSettings({
+        width: ownWidth(img) || styleValue(img, 'width') || undefined,
+        maxWidth: styleValue(img, 'max-width') || undefined,
+        height: img.getAttribute('height') || styleValue(img, 'height') || undefined,
+        textAlign: pad.getAttribute?.('align') || styleValue(pad, 'text-align') || undefined,
+        padding: boxFromPadding(pad),
+      }),
+    }];
+  }
+
+  const heading = firstMeaningfulElement(blockEl, 'h1, h2, h3');
+  if (heading && /\bheading_block\b/.test(cls)) {
+    const pad = heading.closest?.('td.pad') || blockEl;
+    return [{
+      id: createImportedDomId(),
+      type: COMPONENT_TYPES.HEADING,
+      content: beeTextFrom(heading),
+      settings: compactSettings({
+        ...textSettingsFromElement(heading),
+        textColor: styleValue(heading, 'color') || undefined,
+        padding: boxFromPadding(pad),
+      }),
+    }];
+  }
+
+  const button = firstMeaningfulElement(blockEl, 'span.button, a.v-button, a');
+  if (button && /\bbutton_block\b/.test(cls)) {
+    const link = button.closest?.('a') || (button.tagName?.toLowerCase?.() === 'a' ? button : null);
+    const buttonEl = button.matches?.('span.button') ? button : firstMeaningfulElement(button, 'span.button') || button;
+    const pad = button.closest?.('td.pad') || blockEl;
+    return [{
+      id: createImportedDomId(),
+      type: COMPONENT_TYPES.BUTTON,
+      content: beeTextFrom(buttonEl),
+      linkUrl: normalizeImportedUrl(link?.getAttribute?.('href') || '', assetBaseUrl),
+      settings: compactSettings({
+        buttonColor: styleValue(buttonEl, 'background-color') || undefined,
+        buttonTextColor: styleValue(buttonEl, 'color') || undefined,
+        borderRadius: parseInt(styleValue(buttonEl, 'border-radius') || '0', 10) || undefined,
+        fontFamily: styleValue(buttonEl, 'font-family') || undefined,
+        fontSize: styleValue(buttonEl, 'font-size') || undefined,
+        fontWeight: styleValue(buttonEl, 'font-weight') || undefined,
+        textAlign: pad.getAttribute?.('align') || styleValue(pad, 'text-align') || undefined,
+        padding: boxFromPadding(buttonEl.querySelector?.('.btn-pad') || buttonEl),
+      }),
+    }];
+  }
+
+  const paragraph = firstMeaningfulElement(blockEl, 'p, div');
+  if (paragraph && /\bparagraph_block\b/.test(cls)) {
+    const textRoot = paragraph.closest?.('div') || paragraph;
+    const pad = paragraph.closest?.('td.pad') || blockEl;
+    return [{
+      id: createImportedDomId(),
+      type: COMPONENT_TYPES.PARAGRAPH,
+      content: beeTextFrom(paragraph),
+      settings: compactSettings({
+        ...textSettingsFromElement(textRoot),
+        textColor: styleValue(textRoot, 'color') || undefined,
+        padding: boxFromPadding(pad),
+      }),
+    }];
+  }
+
+  const nested = Array.from(blockEl.children || []).flatMap((child) => beeEditableComponentFromBlock(child, assetBaseUrl));
+  if (nested.length > 0) return nested;
+  const html = blockEl.outerHTML || '';
+  return html.trim() ? [{ id: createImportedDomId(), type: COMPONENT_TYPES.HTML, importedDomTree: true, htmlContent: html, settings: {} }] : [];
+};
+
+const beeEditableComponentsFromCell = (td, assetBaseUrl = '') => {
+  const components = Array.from(td.children || []).flatMap((child) => beeEditableComponentFromBlock(child, assetBaseUrl));
+  if (components.length > 0) return components;
+  const html = td.innerHTML || '';
+  return html.trim() ? [{ id: createImportedDomId(), type: COMPONENT_TYPES.HTML, importedDomTree: true, htmlContent: html, settings: {} }] : [];
+};
+
 /**
  * Build editor rows from a BEE/Mailjet template.
  * Each "row row-N" table becomes one editor row.
@@ -657,7 +788,11 @@ const beeSectionTableToRows = (doc, assetBaseUrl = '') => {
     const contentTable = rowTable.querySelector('table.row-content');
     if (!contentTable) return;
 
-    let colTDs = Array.from(contentTable.querySelectorAll(':scope > tbody > tr > td'));
+    const rowContentBgColor = ownBgColor(contentTable);
+    let colTDs = Array.from(contentTable.querySelectorAll(':scope > tbody > tr > td')).filter((td) => {
+      const cls = `${td.getAttribute?.('class') || ''}`;
+      return !/\bgap\b/.test(cls);
+    });
 
     // If there is exactly one outer TD, check whether it contains a nested multi-column
     // table (BEE "row row-N" with inner column layout rather than top-level TDs).
@@ -669,7 +804,10 @@ const beeSectionTableToRows = (doc, assetBaseUrl = '') => {
         return innerTDs.length > 1;
       });
       if (innerColTable) {
-        colTDs = Array.from(innerColTable.querySelectorAll(':scope > tbody > tr > td'));
+        colTDs = Array.from(innerColTable.querySelectorAll(':scope > tbody > tr > td')).filter((td) => {
+          const cls = `${td.getAttribute?.('class') || ''}`;
+          return !/\bgap\b/.test(cls);
+        });
       }
     }
 
@@ -698,25 +836,146 @@ const beeSectionTableToRows = (doc, assetBaseUrl = '') => {
       : normalizeGridSizes([], colCount);
     result.push({
       id: createImportedDomId(),
-      settings: compactSettings({ backgroundColor: bgColor, padding: { top: 0, right: 0, bottom: 0, left: 0 } }),
+      settings: compactSettings({
+        backgroundColor: bgColor || rowContentBgColor || 'transparent',
+        padding: boxFromPadding(contentTable),
+      }),
       columns: activeTDs.map((td, idx) => ({
         id: createImportedDomId(),
         size: sizes[idx],
         settings: compactSettings({
-          backgroundColor: ownBgColor(td),
-          padding: { top: 0, right: 0, bottom: 0, left: 0 },
+          backgroundColor: ownBgColor(td) || rowContentBgColor || 'transparent',
+          padding: boxFromPadding(td),
+          verticalAlign: styleValue(td, 'vertical-align') || td.getAttribute?.('valign') || 'top',
         }),
-        components: (() => {
-          // Preserve BEE block content as raw HTML to avoid structural decomposition
-          const html = td.innerHTML || '';
-          if (!html.trim()) return [];
-          return [{ id: createImportedDomId(), type: COMPONENT_TYPES.HTML, importedDomTree: true, htmlContent: html, settings: {} }];
-        })(),
+        components: beeEditableComponentsFromCell(td, assetBaseUrl),
       })),
     });
   });
 
   return result;
+};
+
+const sectionSettingsFromTable = (tableEl, assetBaseUrl = '') => {
+  const wrapperCell = tableEl.closest?.('td');
+  const wrapperTable = tableEl.closest?.('table.es-header, table.es-content, table.es-footer');
+  return compactSettings({
+    backgroundColor: ownBgColor(wrapperCell) || ownBgColor(wrapperTable) || ownBgColor(tableEl) || 'transparent',
+    backgroundImage: ownBgImage(wrapperCell, assetBaseUrl) || ownBgImage(wrapperTable, assetBaseUrl) || ownBgImage(tableEl, assetBaseUrl) || undefined,
+    backgroundSize: styleValue(wrapperCell, 'background-size') || styleValue(wrapperTable, 'background-size') || styleValue(tableEl, 'background-size') || undefined,
+    backgroundPosition: styleValue(wrapperCell, 'background-position') || styleValue(wrapperTable, 'background-position') || styleValue(tableEl, 'background-position') || undefined,
+    backgroundRepeat: styleValue(wrapperCell, 'background-repeat') || styleValue(wrapperTable, 'background-repeat') || styleValue(tableEl, 'background-repeat') || undefined,
+    padding: { top: 0, right: 0, bottom: 0, left: 0 },
+  });
+};
+
+const isAppGeneratedTemplate = (doc) => {
+  return doc.querySelectorAll?.('td.generated-grid.stack-column-cell, td.stack-column-cell.generated-grid').length > 0;
+};
+
+const isUnlayerTemplate = (doc) => {
+  return doc.querySelectorAll?.('.u-row-container .u-row .u-col').length > 0;
+};
+
+const unlayerColumnSize = (colEl) => {
+  const cls = `${colEl.getAttribute?.('class') || ''}`;
+  const pctClass = cls.match(/\bu-col-(\d+)p(\d+)\b/);
+  if (pctClass) return Math.max(1, Math.round((Number.parseFloat(`${pctClass[1]}.${pctClass[2]}`) / 100) * 12));
+  const wholeClass = cls.match(/\bu-col-(\d+)\b/);
+  if (wholeClass) return Math.max(1, Math.round((Number.parseFloat(wholeClass[1]) / 100) * 12));
+  const minWidth = Number.parseFloat(styleValue(colEl, 'min-width')) || 0;
+  const rowEl = colEl.closest?.('.u-row');
+  const rowWidth = Number.parseFloat(styleValue(rowEl, 'max-width')) || Number.parseFloat(styleValue(rowEl, 'width')) || 0;
+  return minWidth && rowWidth ? Math.max(1, Math.round((minWidth / rowWidth) * 12)) : null;
+};
+
+const unlayerColumnContentRoot = (colEl) => {
+  const wrappers = Array.from(colEl.querySelectorAll?.('div') || []);
+  return wrappers.find((el) => `${el.getAttribute?.('style') || ''}`.includes('box-sizing: border-box')) || colEl;
+};
+
+const buildUnlayerImport = (doc, assetBaseUrl = '') => {
+  const rows = Array.from(doc.querySelectorAll?.('.u-row') || []).map((rowEl) => {
+    const rowContainer = rowEl.closest?.('.u-row-container');
+    const columns = Array.from(rowEl.querySelectorAll?.('.u-col') || []).filter((colEl) => colEl.closest?.('.u-row') === rowEl);
+    const sizes = normalizeGridSizes(columns.map(unlayerColumnSize), columns.length || 1);
+    return {
+      id: createImportedDomId(),
+      settings: compactSettings({
+        backgroundColor: ownBgColor(rowEl) || ownBgColor(rowContainer) || 'transparent',
+        backgroundImage: ownBgImage(rowContainer, assetBaseUrl) || ownBgImage(rowEl, assetBaseUrl) || undefined,
+        backgroundSize: styleValue(rowContainer, 'background-size') || styleValue(rowEl, 'background-size') || undefined,
+        backgroundPosition: styleValue(rowContainer, 'background-position') || styleValue(rowEl, 'background-position') || undefined,
+        backgroundRepeat: styleValue(rowContainer, 'background-repeat') || styleValue(rowEl, 'background-repeat') || undefined,
+        padding: boxFromPadding(rowContainer),
+      }),
+      columns: columns.map((colEl, index) => {
+        const contentRoot = unlayerColumnContentRoot(colEl);
+        return {
+          id: createImportedDomId(),
+          size: sizes[index],
+          settings: compactSettings({
+            backgroundColor: ownBgColor(colEl) || ownBgColor(contentRoot) || 'transparent',
+            padding: boxFromPadding(contentRoot),
+            verticalAlign: styleValue(colEl, 'vertical-align') || 'top',
+          }),
+          components: Array.from(contentRoot.childNodes || []).flatMap((child) => domNodeToComponents(child, assetBaseUrl)),
+        };
+      }),
+    };
+  }).filter((row) => row.columns.length > 0);
+
+  return [{
+    id: createImportedDomId(),
+    settings: { backgroundColor: ownBgColor(doc.body) || 'transparent', padding: { top: 0, right: 0, bottom: 0, left: 0 } },
+    rows,
+  }];
+};
+
+const buildAppGeneratedImport = (doc, assetBaseUrl = '') => {
+  const rows = [];
+  const rowEls = Array.from(doc.querySelectorAll?.('tr') || []);
+  rowEls.forEach((tr) => {
+    const cells = Array.from(tr.children || []).filter((cell) => {
+      const cls = `${cell.getAttribute?.('class') || ''}`;
+      return /\bgenerated-grid\b/.test(cls) && /\bstack-column-cell\b/.test(cls);
+    });
+    if (cells.length === 0) return;
+
+    const rawSizes = cells.map((cell) => {
+      const width = cell.getAttribute?.('width') || styleValue(cell, 'width') || '';
+      if (`${width}`.trim().endsWith('%')) return pctToGridSize(width);
+      const pct = Number.parseFloat(`${width}`.replace('%', ''));
+      return Number.isFinite(pct) ? Math.max(1, Math.round((pct / 100) * 12)) : null;
+    });
+    const sizes = rawSizes.every(Boolean) ? normalizeGridSizes(rawSizes, cells.length) : normalizeGridSizes([], cells.length);
+    const rowWrapperCell = tr.closest?.('td:not(.generated-grid)');
+    const rowBackgroundColor = ownBgColor(tr) || ownBgColor(rowWrapperCell);
+
+    rows.push({
+      id: createImportedDomId(),
+      settings: compactSettings({
+        backgroundColor: rowBackgroundColor || 'transparent',
+        padding: boxFromPadding(rowWrapperCell),
+      }),
+      columns: cells.map((cell, index) => ({
+        id: createImportedDomId(),
+        size: sizes[index],
+        settings: compactSettings({
+          backgroundColor: ownBgColor(cell) || 'transparent',
+          padding: boxFromPadding(cell),
+          verticalAlign: styleValue(cell, 'vertical-align') || cell.getAttribute?.('valign') || 'top',
+        }),
+        components: Array.from(cell.childNodes || []).flatMap((child) => domNodeToComponents(child, assetBaseUrl)),
+      })),
+    });
+  });
+
+  return [{
+    id: createImportedDomId(),
+    settings: { backgroundColor: ownBgColor(doc.body) || 'transparent', padding: { top: 0, right: 0, bottom: 0, left: 0 } },
+    rows,
+  }];
 };
 
 const buildDomTreeImport = (htmlText = '', assetBaseUrl = '') => {
@@ -729,17 +988,43 @@ const buildDomTreeImport = (htmlText = '', assetBaseUrl = '') => {
   const stripoWrapperTables = Array.from(doc.querySelectorAll('table.es-header, table.es-content, table.es-footer'));
   const tables = sectionBodyTables.length > 0 ? sectionBodyTables : (stripoWrapperTables.length > 0 ? stripoWrapperTables : Array.from(doc.body?.querySelectorAll?.('table') || []).slice(0, 1));
 
+  if (isAppGeneratedTemplate(doc)) {
+    return buildAppGeneratedImport(doc, assetBaseUrl);
+  }
+
+  if (isUnlayerTemplate(doc)) {
+    return buildUnlayerImport(doc, assetBaseUrl);
+  }
+
+  if (isBeeTemplate(doc)) {
+    const now = createImportedDomId();
+    return [{
+      id: now,
+      settings: { backgroundColor: 'transparent', padding: { top: 0, right: 0, bottom: 0, left: 0 } },
+      rows: beeSectionTableToRows(doc, assetBaseUrl),
+    }];
+  }
+
+  if (sectionBodyTables.length > 0) {
+    return sectionBodyTables.map((tableEl) => ({
+      id: createImportedDomId(),
+      settings: sectionSettingsFromTable(tableEl, assetBaseUrl),
+      rows: sectionTableToRows(tableEl, assetBaseUrl),
+    }));
+  }
+
   const now = createImportedDomId();
   return [{
     id: now,
     settings: { backgroundColor: 'transparent', padding: { top: 0, right: 0, bottom: 0, left: 0 } },
-    rows: isBeeTemplate(doc) ? beeSectionTableToRows(doc, assetBaseUrl) : tables.flatMap((tableEl) => sectionTableToRows(tableEl, assetBaseUrl)),
+    rows: tables.flatMap((tableEl) => sectionTableToRows(tableEl, assetBaseUrl)),
   }];
 };
 
 const EmailList = () => {
   const navigate = useNavigate();
   const fileRef = useRef(null);
+  const folderRef = useRef(null);
   const [importError, setImportError] = useState('');
   const [isImporting, setIsImporting] = useState(false);
 
@@ -749,6 +1034,10 @@ const EmailList = () => {
 
   const handleEditClick = () => {
     if (fileRef.current) fileRef.current.click();
+  };
+
+  const handleFolderImportClick = () => {
+    if (folderRef.current) folderRef.current.click();
   };
 
   // Fix 9: central error display helper
@@ -863,6 +1152,7 @@ const EmailList = () => {
     } finally {
       setIsImporting(false);
       if (fileRef.current) fileRef.current.value = '';
+      if (folderRef.current) folderRef.current.value = '';
     }
   };
 
@@ -920,20 +1210,46 @@ const EmailList = () => {
           isLoading={isImporting}
           loadingText="Importing…"
         >
-          Edit (Upload Template)
+          Edit HTML File
+        </Button>
+
+        <Button
+          onClick={handleFolderImportClick}
+          leftIcon={<EditIcon />}
+          variant="outline"
+          colorScheme="teal"
+          size="lg"
+          justifyContent="flex-start"
+          h="56px"
+          isDisabled={isImporting}
+          isLoading={isImporting}
+          loadingText="Importing…"
+        >
+          Edit Template Folder
         </Button>
 
         <Text fontSize="sm" color="gray.500" textAlign="center">
-          Upload an HTML email template to edit and download.
-          Select your .html template. To include local images, also select them at the same time.
+          Upload a single HTML file, or upload the full template folder when it has local images/assets.
         </Text>
 
-        {/* File upload — select .html template and any local images together */}
+        {/* File upload — select .html template and optional local images together */}
         <input
           ref={fileRef}
           type="file"
           accept=".html,.htm,text/html,image/*"
           multiple
+          style={{ display: 'none' }}
+          onChange={handleFileChange}
+        />
+
+        {/* Folder upload — select a template folder containing HTML and local assets */}
+        <input
+          ref={folderRef}
+          type="file"
+          accept=".html,.htm,text/html,image/*"
+          multiple
+          webkitdirectory=""
+          directory=""
           style={{ display: 'none' }}
           onChange={handleFileChange}
         />
